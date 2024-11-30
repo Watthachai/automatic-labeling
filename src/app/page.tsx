@@ -1,101 +1,135 @@
-import Image from "next/image";
+// page.tsx
+'use client'
+import { useState, useEffect } from 'react'
 
-export default function Home() {
+export default function ArduinoConnect() {
+  const [port, setPort] = useState<SerialPort | null>(null)
+  const [connected, setConnected] = useState(false)
+  const [logs, setLogs] = useState<string[]>([])
+  const [status, setStatus] = useState('Disconnected')
+
+  // Auto-connect on component mount
+  useEffect(() => {
+    const autoConnect = async () => {
+      try {
+        const ports = await navigator.serial.getPorts()
+        if (ports.length > 0) {
+          const port = ports[0]
+          await port.open({ baudRate: 9600 })
+          setPort(port)
+          setConnected(true)
+          setStatus('Connected')
+          addLog('Auto-connected to Arduino')
+          startReading(port)
+        }
+      } catch (err) {
+        setStatus('Connection failed')
+        addLog('Auto-connect failed: ' + err)
+      }
+    }
+    autoConnect()
+    return () => {
+      if (port) port.close()
+    }
+  }, [])
+
+  const addLog = (message: string) => {
+    setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])
+  }
+
+  const startReading = async (port: SerialPort) => {
+    while (port.readable) {
+      const reader = port.readable.getReader()
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          const text = new TextDecoder().decode(value)
+          addLog(`Received: ${text}`)
+        }
+      } catch (err) {
+        addLog('Read error: ' + err)
+      } finally {
+        reader.releaseLock()
+      }
+    }
+  }
+
+  const connect = async () => {
+    try {
+      const selectedPort = await navigator.serial.requestPort()
+      await selectedPort.open({ baudRate: 9600 })
+      setPort(selectedPort)
+      setConnected(true)
+      setStatus('Connected')
+      addLog('Manually connected to Arduino')
+      startReading(selectedPort)
+    } catch (err) {
+      setStatus('Connection failed')
+      addLog('Connection failed: ' + err)
+    }
+  }
+
+  const sendHello = async () => {
+    if (!port) return
+    try {
+      const writer = port.writable.getWriter()
+      const data = new TextEncoder().encode('hello\n')
+      await writer.write(data)
+      writer.releaseLock()
+      addLog('Sent: hello')
+    } catch (err) {
+      addLog('Send error: ' + err)
+    }
+  }
+
+  const disconnect = async () => {
+    if (port) {
+      await port.close()
+      setPort(null)
+      setConnected(false)
+      setStatus('Disconnected')
+      addLog('Disconnected from Arduino')
+    }
+  }
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="p-4">
+      <h1 className="text-2xl mb-4">Arduino Web Serial Connection</h1>
+      
+      <div className="mb-4">
+        <span className="font-bold">Status: </span>
+        <span className={`${status === 'Connected' ? 'text-green-500' : 'text-red-500'}`}>
+          {status}
+        </span>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      <button
+        onClick={connected ? disconnect : connect}
+        className="bg-blue-500 text-white px-4 py-2 rounded mr-2"
+      >
+        {connected ? 'Disconnect' : 'Connect to Arduino'}
+      </button>
+
+      {connected && (
+        <button
+          onClick={sendHello}
+          className="bg-green-500 text-white px-4 py-2 rounded"
+        >
+          Send Hello
+        </button>
+      )}
+
+      <div className="mt-4">
+        <h2 className="text-xl mb-2">Logs</h2>
+        <div className="bg-gray-100 p-4 rounded h-48 overflow-y-auto text-black">
+          {logs.map((log, index) => (
+            <div key={index} className="text-sm">
+              {log}
+            </div>
+          ))}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
     </div>
-  );
+  )
 }
