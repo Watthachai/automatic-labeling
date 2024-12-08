@@ -1,6 +1,8 @@
 // page.tsx
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import ExcelFileReader from '@/app/components/ui/ExcelFileReader';
+import DataDisplayAndControl from '@/app/components/ui/DataDisplayAndControl';
 
 export default function ArduinoConnect() {
   const [port, setPort] = useState<SerialPort | null>(null)
@@ -161,42 +163,9 @@ export default function ArduinoConnect() {
   }
 
   return (
-    <div className="p-4">
-      <h1 className="text-2xl mb-4">Arduino Web Serial Connection</h1>
-      
-      <div className="mb-4">
-        <span className="font-bold">Status: </span>
-        <span className={`${status === 'Connected' ? 'text-green-500' : 'text-red-500'}`}>
-          {status}
-        </span>
-      </div>
-
-      <button
-        onClick={connected ? disconnect : autoConnect}
-        className="bg-blue-500 text-white px-4 py-2 rounded mr-2"
-      >
-        {connected ? 'Disconnect' : 'Connect to Arduino'}
-      </button>
-
-      {connected && (
-        <button
-          onClick={sendHello}
-          className="bg-green-500 text-white px-4 py-2 rounded"
-        >
-          Send Hello
-        </button>
-      )}
-
-      <div className="mt-4">
-        <h2 className="text-xl mb-2">Logs</h2>
-        <div className="bg-gray-100 p-4 rounded h-48 overflow-y-auto text-black">
-          {logs.map((log, index) => (
-            <div key={index} className="text-sm">
-              {log}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+  <div className="flex">    
+    <ExcelFileReader />
+    <DataDisplayAndControl />
+  </div>
   )
 }
