@@ -14,6 +14,33 @@
   }
 }
 
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-label {
+    visibility: visible;
+    width: 50mm;
+    height: 20mm;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+  }
+  .print-label .qr-code {
+    width: 25mm; /* Half of the label width */
+    height: 20mm;
+    float: left;
+  }
+  .print-label .text-content {
+    width: 25mm; /* Remaining space */
+    height: 20mm;
+    float: left;
+    font-size: 8pt; /* Adjust font size to fit the space */
+    line-height: 1;
+  }
+}
+
+
 body {
   color: var(--foreground);
   background: var(--background);
