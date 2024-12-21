@@ -3,12 +3,15 @@ import * as XLSX from 'xlsx';
 import QRCode from 'react-qr-code';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-
 interface SheetData {
-  [key: string]: string | number;
+  [key: string]: string | number | undefined;
 }
 
-const ExcelFileReader: React.FC = () => {
+interface Props {
+  onDataSelect: (rowData: SheetData) => void;
+}
+
+const ExcelFileReader: React.FC<Props> = ({ onDataSelect }) => {
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [sheetData, setSheetData] = useState<SheetData[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
@@ -68,253 +71,7 @@ const ExcelFileReader: React.FC = () => {
     return jsDate.toLocaleDateString();
   }
 
-  const handlePrint = () => {
-    // Add print-specific styles
-    const style = document.createElement('style');
-    style.innerHTML = `
-      @media print {
-        @page {
-          size: 50mm 20mm;
-          margin: 0;
-        }
-        html, body {
-      margin: 0 !important;
-      padding: 0 !important;
-      height: 20mm;
-      overflow: hidden;
-    }
 
-    /* Only show print section */
-    .print-section {
-      display: block !important;
-      position: fixed !important;
-      left: 0 !important;
-      top: 0 !important;
-      width: 50mm !important;
-      height: 20mm !important;
-      margin: 0 !important;
-      padding: 1mm !important;
-      overflow: hidden !important;
-    }
-        .print-section, .print-section * {
-          visibility: visible;
-        }
-        .print-section {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 50mm;
-          height: 20mm;
-          padding: 1mm !important;
-          overflow: hidden;
-          transform: scale(1);
-          transform-origin: top left;
-        }
-        /* QR Code sizing */
-        .print-section .qr-code-print {
-          width: 15mm !important;
-          height: 15mm !important;
-        }
-        .print-section .qr-code-print canvas,
-        .print-section .qr-code-print svg {
-          width: 15mm !important;
-          height: 15mm !important;
-        }
-        /* Text adjustments */
-        .print-section .text-lg {
-          font-size: 6pt !important;
-          line-height: 1.1 !important;
-          margin: 0 !important;
-        }
-        .print-section .text-sm {
-          font-size: 5pt !important;
-          line-height: 1 !important;
-          margin: 0 !important;
-        }
-        .print-section .grid {
-          gap: 0.5mm !important;
-        }
-        .print-section .space-y-0 > * + * {
-          margin-top: 0 !important;
-        }
-        .print-section .mb-0,
-        .print-section .mb-2 {
-          margin-bottom: 0.5mm !important;
-        }
-        .print-section .flex {
-          gap: 2mm !important;
-        }
-        /* Keep existing QR and text styles */
-    .print-section .qr-code-print {
-      width: 15mm !important;
-      height: 15mm !important;
-    }
-
-    .print-section .flex {
-      display: flex !important;
-      gap: 2mm !important;
-    }
-
-    .print-section * {
-      display: block !important;
-    }
-      }
-    `;
-    return new Promise((resolve) => {
-      document.head.appendChild(style);
-      
-      // Print settings optimized for PDF
-      const printSettings = {
-        destination: 'Save as PDF',
-        printBackground: true,
-        pageSize: {
-          width: 50000, // in micrometers (50mm)
-          height: 20000 // in micrometers (20mm)
-        },
-        margins: {
-          marginType: 'none'
-        }
-      };
-  
-      try {
-        // @ts-ignore - Chrome-specific PDF print settings
-        window.print(printSettings);
-      } catch {
-        // Fallback to regular print dialog
-        window.print();
-      }
-  
-      setTimeout(() => {
-        document.head.removeChild(style);
-        resolve(true);
-      }, 1000);
-    });
-  };
-
-  const handlePrintToPDF = async () => {
-    try {
-      const style = document.createElement('style');
-    style.innerHTML = `
-      @media print {
-        @page {
-          size: 50mm 20mm;
-          margin: 0;
-        }
-        html, body {
-      margin: 0 !important;
-      padding: 0 !important;
-      height: 20mm;
-      overflow: hidden;
-    }
-
-    /* Only show print section */
-    .print-section {
-      display: block !important;
-      position: fixed !important;
-      left: 0 !important;
-      top: 0 !important;
-      width: 50mm !important;
-      height: 20mm !important;
-      margin: 0 !important;
-      padding: 1mm !important;
-      overflow: hidden !important;
-    }
-        .print-section, .print-section * {
-          visibility: visible;
-        }
-        .print-section {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 50mm;
-          height: 20mm;
-          padding: 1mm !important;
-          overflow: hidden;
-          transform: scale(1);
-          transform-origin: top left;
-        }
-        /* QR Code sizing */
-        .print-section .qr-code-print {
-          width: 15mm !important;
-          height: 15mm !important;
-        }
-        .print-section .qr-code-print canvas,
-        .print-section .qr-code-print svg {
-          width: 15mm !important;
-          height: 15mm !important;
-        }
-        /* Text adjustments */
-        .print-section .text-lg {
-          font-size: 6pt !important;
-          line-height: 1.1 !important;
-          margin: 0 !important;
-        }
-        .print-section .text-sm {
-          font-size: 5pt !important;
-          line-height: 1 !important;
-          margin: 0 !important;
-        }
-        .print-section .grid {
-          gap: 0.5mm !important;
-        }
-        .print-section .space-y-0 > * + * {
-          margin-top: 0 !important;
-        }
-        .print-section .mb-0,
-        .print-section .mb-2 {
-          margin-bottom: 0.5mm !important;
-        }
-        .print-section .flex {
-          gap: 2mm !important;
-        }
-        /* Keep existing QR and text styles */
-    .print-section .qr-code-print {
-      width: 15mm !important;
-      height: 15mm !important;
-    }
-
-    .print-section .flex {
-      display: flex !important;
-      gap: 2mm !important;
-    }
-
-    .print-section * {
-      display: block !important;
-    }
-      }
-    `;
-    
-      // Get the print section element
-      const printSection = document.querySelector('.print-section');
-      if (!printSection) return;
-  
-      // Convert to canvas
-      const canvas = await html2canvas(printSection, {
-        scale: 2, // Higher quality
-        useCORS: true, // Handle QR code image
-        width: 188.9, // 50mm in pixels (at 96 DPI)
-        height: 75.6, // 20mm in pixels
-        backgroundColor: '#ffffff'
-      });
-  
-      // Create PDF
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: [20, 50] // height, width
-      });
-  
-      // Add image to PDF
-      const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', 0, 0, 50, 20);
-  
-      // Save PDF
-      pdf.save(`label-${selectedRowData?.Material}.pdf`);
-    } catch (error) {
-      console.error('PDF generation failed:', error);
-    }
-  };
-  
   return (
     // File upload area
 <div className="w-full max-w-2xl mx-auto p-6">
@@ -466,7 +223,10 @@ const ExcelFileReader: React.FC = () => {
               <tr 
                 key={rowIndex} 
                 className="hover:bg-gray-50 cursor-pointer"
-                onClick={() => setSelectedRowData(row)}
+                onClick={() => {
+                  setSelectedRowData(row); // Keep local state if needed
+                  onDataSelect(row); // Call the prop function to pass data up
+                }}
                 >
                 {Object.values(row).map((value, cellIndex) => (
                   <td 
@@ -493,7 +253,15 @@ const ExcelFileReader: React.FC = () => {
       <button
         className="absolute top-4 right-4 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full no-print"
         title="Print"
-        onClick={handlePrintToPDF}
+        
+        onClick={() => {
+          html2canvas(document.querySelector('.print-section') as HTMLElement).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('l', 'mm', [50, 20]);
+            pdf.addImage(imgData, 'PNG', 2, 2.5, 50, 15);
+            pdf.save('QRCode.pdf');
+          });
+        }}
       >
         {/* Print button SVG */}
         <svg 

@@ -2,13 +2,19 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import ExcelFileReader from '@/app/components/ui/ExcelFileReader';
-import DataDisplayAndControl from '@/app/components/ui/DataDisplayAndControl';
+import ControlPanel from '@/app/components/ui/ControlPanel';
+
+interface SheetData {
+  [key: string]: string | number | undefined; // Make sure types match your data
+}
+
 
 export default function ArduinoConnect() {
   const [port, setPort] = useState<SerialPort | null>(null)
   const [connected, setConnected] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [status, setStatus] = useState('Disconnected')
+  const [selectedRowData, setSelectedRowData] = useState<SheetData | null>(null)
 
   const addLog = (message: string) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])
@@ -139,7 +145,6 @@ export default function ArduinoConnect() {
       addLog('Send error: ' + err)
     }
   }
-
   const disconnect = async () => {
     if (port) {
       try {
@@ -162,10 +167,14 @@ export default function ArduinoConnect() {
     }
   }
 
+  const handleDataSelect = (data: SheetData) => {
+    setSelectedRowData(data);
+  };
+
   return (
   <div className="flex">    
-    <ExcelFileReader />
-    <DataDisplayAndControl />
+    <ExcelFileReader onDataSelect={handleDataSelect} />
+    <ControlPanel productionData={selectedRowData} />
   </div>
   )
 }
