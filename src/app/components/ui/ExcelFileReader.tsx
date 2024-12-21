@@ -3,12 +3,15 @@ import * as XLSX from 'xlsx';
 import QRCode from 'react-qr-code';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-
 interface SheetData {
-  [key: string]: string | number;
+  [key: string]: string | number | undefined;
 }
 
-const ExcelFileReader: React.FC = () => {
+interface Props {
+  onDataSelect: (rowData: SheetData) => void;
+}
+
+const ExcelFileReader: React.FC<Props> = ({ onDataSelect }) => {
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [sheetData, setSheetData] = useState<SheetData[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
@@ -220,7 +223,10 @@ const ExcelFileReader: React.FC = () => {
               <tr 
                 key={rowIndex} 
                 className="hover:bg-gray-50 cursor-pointer"
-                onClick={() => setSelectedRowData(row)}
+                onClick={() => {
+                  setSelectedRowData(row); // Keep local state if needed
+                  onDataSelect(row); // Call the prop function to pass data up
+                }}
                 >
                 {Object.values(row).map((value, cellIndex) => (
                   <td 
