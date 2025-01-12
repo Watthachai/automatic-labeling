@@ -204,7 +204,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
 )}
   
   {selectedSheet && sheetData.length > 0 && (
-    <div className="mt-8 rounded-lg shadow border border-gray-200">
+    <div className="mt-6 rounded-lg shadow border border-gray-200">
       {/* Fixed header wrapper */}
       <div className="max-h-[40vh] overflow-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
         <table className="min-w-full divide-y divide-gray-200">
