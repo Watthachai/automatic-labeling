@@ -7,7 +7,7 @@ interface Props {
   productionData: SheetData | null;
 }
 
-const ControlPanel: React.FC<Props> = ({ productionData }) => {
+const ControlUserPanelPage: React.FC<Props> = ({ productionData }) => {
 
   const [startCount, setStartCount] = useState('0000');
   const [stopCount, setStopCount] = useState('0000');
@@ -102,4 +102,4 @@ const ControlPanel: React.FC<Props> = ({ productionData }) => {
   );
 };
 
-export default ControlPanel;
+export default ControlUserPanelPage;
