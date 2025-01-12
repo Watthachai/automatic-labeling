@@ -1,8 +1,9 @@
 // page.tsx
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import ExcelFileReader from '@/app/components/ui/ExcelFileReader';
-import ControlPanel from '@/app/components/ui/ControlPanel';
+import ExcelFileReader from '@/app/components/ExcelFileReaderPage';
+import ControlPanel from '@/app/components/ControlUserPanelPage';
+import Tabs from '@/app/components/Tabs';
 
 interface SheetData {
   [key: string]: string | number | undefined; // Make sure types match your data
@@ -172,8 +173,19 @@ export default function ArduinoConnect() {
   };
 
   return (
-  <div className="flex">    
-    <ExcelFileReader onDataSelect={handleDataSelect} />
+  <div className="flex">   
+  <Tabs>
+  <div label-data="ExcelFileReader">
+          <ExcelFileReader onDataSelect={handleDataSelect}/>
+        </div>
+        <div label-data="บันทึกการผลิตประจำวัน">
+          <p>This is the production log tab.</p>
+        </div>
+        <div label-data="debug mode">
+          <p>This is the debug mode tab.</p>
+        </div>
+  </Tabs> 
+    
     <ControlPanel productionData={selectedRowData} />
   </div>
   )
