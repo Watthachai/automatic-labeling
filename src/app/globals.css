@@ -40,6 +40,15 @@
   }
 }
 
+.flex {
+  display: flex;
+  width: 100%;
+}
+
+.flex > * {
+  width: 50%;
+}
+
 
 body {
   color: var(--foreground);

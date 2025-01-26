@@ -5,6 +5,7 @@ import ExcelFileReader from '@/app/components/ExcelFileReaderPage';
 import ControlPanel from '@/app/components/ControlUserPanelPage';
 import Tabs from '@/app/components/Tabs';
 import ManualRobot from './components/ManualRobotPage';
+import ProductionLogPage from './components/ProductionLogPage';
 
 interface SheetData {
   [key: string]: string | number | undefined; // Make sure types match your data
@@ -181,7 +182,7 @@ export default function MainPage() {
         <ExcelFileReader onDataSelect={handleDataSelect} />
       </TabContent>
       <TabContent label="บันทึกการผลิตประจำวัน">
-        <p>This is the production log tab.</p>
+        <ProductionLogPage />
       </TabContent>
       <TabContent label="debug mode">
         <ManualRobot />

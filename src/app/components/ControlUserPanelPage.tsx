@@ -1,4 +1,15 @@
 import { useState } from 'react';
+
+interface ProductionLog {
+  startTime: string;
+  endTime?: string;
+  material: string | undefined;
+  batch: string | undefined;
+  startCount: string;
+  endCount?: string;
+  operator: string;
+}
+
 interface SheetData {
   [key: string]: string | number | undefined;
 }
@@ -8,15 +19,46 @@ interface Props {
 }
 
 const ControlUserPanelPage: React.FC<Props> = ({ productionData }) => {
-
   const [startCount, setStartCount] = useState('0000');
   const [stopCount, setStopCount] = useState('0000');
+  const [isProducing, setIsProducing] = useState(false);
+  const [currentLog, setCurrentLog] = useState<ProductionLog | null>(null);
+  const [operator, setOperator] = useState('');
 
   const material = productionData?.Material;
   const batch = productionData?.Batch;
-  const vendorBatch = productionData?.["Vendor Batch"]; // Access with bracket notation for keys with spaces
+  const vendorBatch = productionData?.["Vendor Batch"];
   const materialDescription = productionData?.["Material Description"];
 
+  const handleStartProduction = () => {
+    if (!isProducing) {
+      const newLog: ProductionLog = {
+        startTime: new Date().toISOString(),
+        material: material?.toString(),
+        batch: batch?.toString(),
+        startCount,
+        operator
+      };
+      setCurrentLog(newLog);
+      setIsProducing(true);
+      // You can also send this log to your backend/database
+      console.log('Production Started:', newLog);
+    }
+  };
+
+  const handleStopProduction = () => {
+    if (isProducing && currentLog) {
+      const completedLog = {
+        ...currentLog,
+        endTime: new Date().toISOString(),
+        endCount: stopCount
+      };
+      setIsProducing(false);
+      setCurrentLog(null);
+      // Send completed log to backend/database
+      console.log('Production Completed:', completedLog);
+    }
+  };
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 space-y-4">
@@ -70,6 +112,48 @@ const ControlUserPanelPage: React.FC<Props> = ({ productionData }) => {
             {stopCount}
           </div>
         </div>
+
+        {/* Production Control */}
+        <div className="mt-4 grid grid-cols-2 gap-4">
+          <input
+            type="text"
+            value={operator}
+            onChange={(e) => setOperator(e.target.value)}
+            placeholder="Operator Name"
+            className="p-2 border rounded"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleStartProduction}
+              disabled={isProducing}
+              className={`flex-1 p-2 rounded ${
+                isProducing 
+                  ? 'bg-gray-400' 
+                  : 'bg-green-500 hover:bg-green-600'
+              } text-white`}
+            >
+              Start
+            </button>
+            <button
+              onClick={handleStopProduction}
+              disabled={!isProducing}
+              className={`flex-1 p-2 rounded ${
+                !isProducing 
+                  ? 'bg-gray-400' 
+                  : 'bg-red-500 hover:bg-red-600'
+              } text-white`}
+            >
+              Stop
+            </button>
+          </div>
+        </div>
+
+        {/* Production Status */}
+        {isProducing && (
+          <div className="mt-4 p-2 bg-green-100 rounded text-center">
+            Production in progress - Started at {new Date(currentLog?.startTime || '').toLocaleTimeString()}
+          </div>
+        )}
       </div>
 
       {/* Camera Inspection Group */}
