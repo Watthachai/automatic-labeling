@@ -1,51 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-interface ProductionLog {
-  date: string;
-  startTime: string;
-  endTime: string;
-  material: string;
-  materialDescription: string;
-  batch: string;
-  vendorBatch: string;
-  startCount: number;
-  endCount: number;
-  totalProduced: number;
-  operator: string;
-  status: 'Completed' | 'In Progress';
-}
 
 const ProductionLogPage: React.FC = () => {
   const [logs, setLogs] = useState<ProductionLog[]>([]);
 
-  // Function to add new log from production data
-  const addProductionLog = (productionData: {
-    startTime: string;
-    endTime: string;
-    startCount: string;
-    stopCount: string;
-    operator: string;
-    material?: string;
-    batch?: string;
-  }) => {
-    const newLog: ProductionLog = {
-      date: new Date(productionData.startTime).toISOString().split('T')[0],
-      startTime: productionData.startTime,
-      endTime: productionData.endTime,
-      material: productionData.material || '',
-      materialDescription: '',
-      batch: productionData.batch || '',
-      vendorBatch: '',
-      startCount: parseInt(productionData.startCount),
-      endCount: parseInt(productionData.stopCount),
-      totalProduced: parseInt(productionData.stopCount) - parseInt(productionData.startCount),
-      operator: productionData.operator,
-      status: 'Completed'
-    };
-
-    setLogs(prevLogs => [...prevLogs, newLog]);
-  };
 
   // Export function remains the same
   const exportToExcel = () => {

@@ -38,6 +38,16 @@
     font-size: 8pt; /* Adjust font size to fit the space */
     line-height: 1;
   }
+
+  /* Target flex properties only when printing */
+  .print-section .flex {
+    display: flex;
+    width: 100%;
+  }
+
+  .print-section .flex > * {
+    width: 50%;
+  }
 }
 
 .flex {
