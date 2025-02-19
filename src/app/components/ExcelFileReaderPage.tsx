@@ -109,32 +109,31 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
 
     // Add content to the iframe
     iframeDocument.body.innerHTML = `
-      <div class="print-section">
-        <div style="display: flex; gap: 0mm; width: 50mm;">
-          
-          <div style="flex-shrink: 0; width: auto;">
-            <img src="${qrCodeDataUrlRef.current}" style="width: 20mm; height: 20mm;" />
-          </div>
+    <div class="print-section" style="width: 50mm; height: 20mm; display: flex; align-items: center; padding: 0mm; font-family: Arial, sans-serif;">
+      
+      <!-- QR Code Section -->
+      <div style="width: 20mm; height: 20mm; flex-shrink: 0;">
+        <img src="${qrCodeDataUrlRef.current}" style="width: 100%; height: 100%;" />
+      </div>
 
-          <div style="flex-grow: 1; font-weight: bold; padding-left: 4mm; width: auto; font-size: 6pt;">
-            <div>MAT: ${selectedRowData.Material} - UNIT: ${selectedRowData.Unit}</div>
-            <div>BATCH: ${selectedRowData.Batch}</div>
-            <div>${selectedRowData["Material Description"]}</div>
-            <div style="margin-top: 2mm;">
-              UNIT: ${selectedRowData.Unit}
-            </div>
-            <div>
-              Expire date: ${typeof selectedRowData["SLED/BBD"] === 'number'
-                ? convertExcelDateToJSDate(selectedRowData["SLED/BBD"])
-                : selectedRowData["SLED/BBD"]}
-            </div>
-            <div>
-              Vendor Batch: ${selectedRowData["Vendor Batch"]}
-            </div>
-          </div>
+      <!-- Text Section -->
+      <div style="flex-grow: 1; padding-left: 2mm; font-size: 5pt; line-height: 1.2;">
+        <div style="font-weight: bold;">MAT: ${selectedRowData.Material}-UNIT:${selectedRowData.Unit}</div>
+        <div style="font-weight: bold;">BATCH: ${selectedRowData.Batch}</div>
+        <div style="font-weight: bold;">${selectedRowData["Material Description"]}</div>
+
+        <!-- Row for UNIT, Expiry, Vendor Batch -->
+        <div style="display: flex; margin-top: 1mm; font-size: 5pt;">
+          <div style="flex: 1;"><b>UNIT</b><br>${selectedRowData.Unit}</div>
+          <div style="flex: 1;"><b>Expire date</b><br>${typeof selectedRowData["SLED/BBD"] === 'number'
+            ? convertExcelDateToJSDate(selectedRowData["SLED/BBD"])
+            : selectedRowData["SLED/BBD"]}</div>
+          <div style="flex: 1;"><b>Vendor Batch</b><br>${selectedRowData["Vendor Batch"]}</div>
         </div>
       </div>
-    `;
+
+    </div>
+  `;
 
     // Print the iframe
     iframe.contentWindow?.focus();
