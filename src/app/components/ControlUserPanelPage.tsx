@@ -1,4 +1,9 @@
-import { useState } from 'react';
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { logAudit } from '../lib/audit';
+
 interface SheetData {
   [key: string]: string | number | undefined;
 }
@@ -8,11 +13,40 @@ interface Props {
   onLogProduction?: (logData: ProductionLog) => void;
 }
 
-const ControlUserPanelPage: React.FC<Props> = ({ productionData, onLogProduction }) => {
+export default function ControlUserPanelPage({ productionData }: Props) {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [startCount, setStartCount] = useState('0000');
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [stopCount, setStopCount] = useState('0000');
+
+  useEffect(() => {
+    // Verify authentication on component mount
+    const token = sessionStorage.getItem('token');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    // Verify token and get user data
+    const verifySession = async () => {
+      const response = await fetch('/api/verify-session', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (!response.ok) {
+        sessionStorage.removeItem('token');
+        router.push('/login');
+        return;
+      }
+
+      const userData = await response.json();
+      setUser(userData);
+    };
+
+    verifySession();
+  }, []);
 
   const handleStart = () => {
     setIsRunning(true);
@@ -24,11 +58,14 @@ const ControlUserPanelPage: React.FC<Props> = ({ productionData, onLogProduction
   const handleStop = () => {
     setIsRunning(false);
     if (onLogProduction && startTime) {
+      const currentUser = JSON.parse(sessionStorage.getItem('currentUser') || '{}');
+      
       onLogProduction({
+        userId: currentUser.id,
+        username: currentUser.username,
         date: new Date().toISOString().split('T')[0],
         startTime: startTime.toISOString(),
         endTime: new Date().toISOString(),
-        operator: "Current Operator", // Add operator name handling
         startCount: parseInt(startCount),
         endCount: parseInt(stopCount),
         totalProduced: parseInt(stopCount) - parseInt(startCount),
@@ -38,6 +75,17 @@ const ControlUserPanelPage: React.FC<Props> = ({ productionData, onLogProduction
         materialDescription: productionData?.["Material Description"]
       });
     }
+  };
+
+  const handleStartProduction = async () => {
+    // Log production start
+    await logAudit(
+      user.id,
+      'START_PRODUCTION',
+      `Started production for batch ${productionData.batch}`,
+      productionData.id,
+      window.location.hostname
+    );
   };
 
   const material = productionData?.Material;
@@ -139,5 +187,3 @@ const ControlUserPanelPage: React.FC<Props> = ({ productionData, onLogProduction
     </div>
   );
 };
-
-export default ControlUserPanelPage;

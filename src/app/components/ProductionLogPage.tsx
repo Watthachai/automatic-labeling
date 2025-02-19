@@ -6,14 +6,22 @@ const ProductionLogPage: React.FC = () => {
   const [logs, setLogs] = useState<ProductionLog[]>([]);
 
 
-  // Export function remains the same
+  // Modify the exportToExcel function in ProductionLogPage.tsx
   const exportToExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(logs);
+    // Add username to the logs data
+    const logsWithUser = logs.map(log => ({
+      ...log,
+      operator: log.username // Include the username in the export
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(logsWithUser);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Production Logs");
     
+    // Set column widths
     const colWidths = [
       { wch: 12 }, // date
+      { wch: 15 }, // operator (username)
       { wch: 15 }, // material
       { wch: 30 }, // description
       { wch: 15 }, // batch
@@ -21,12 +29,9 @@ const ProductionLogPage: React.FC = () => {
       { wch: 10 }, // start count
       { wch: 10 }, // end count
       { wch: 10 }, // total
-      { wch: 15 }, // operator
-      { wch: 12 }, // status
-      { wch: 20 }, // remarks
     ];
+    
     worksheet["!cols"] = colWidths;
-
     XLSX.writeFile(workbook, "production_logs.xlsx");
   };
 

@@ -1,0 +1,78 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String          @id @default(cuid())
+  username      String          @unique
+  password      String
+  role          Role           @default(OPERATOR)
+  hospitalId    String
+  department    String
+  phoneNumber   String    
+  createdAt     DateTime       @default(now())
+  lastLogin     DateTime?
+  isActive      Boolean        @default(true)
+  is2FAEnabled  Boolean        @default(true)
+  productions   Production[]
+  auditLogs     AuditLog[]
+  twoFactorCodes TwoFactorCode[] // Add this relation
+}
+
+model Production {
+  id                String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  material         String
+  batch            String
+  vendorBatch      String
+  startTime        DateTime
+  endTime          DateTime?
+  startCount       Int
+  endCount         Int?
+  status           Status   @default(IN_PROGRESS)
+  verifiedBy       String?
+  verifiedAt       DateTime?
+  auditLogs        AuditLog[]
+}
+
+model AuditLog {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  action       String
+  details      String
+  productionId String?
+  production   Production? @relation(fields: [productionId], references: [id])
+  ipAddress    String
+  createdAt    DateTime   @default(now())
+}
+
+model TwoFactorCode {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  ADMIN
+  SUPERVISOR
+  OPERATOR
+  PHARMACIST
+}
+
+enum Status {
+  IN_PROGRESS
+  COMPLETED
+  VERIFIED
+  REJECTED
+}
