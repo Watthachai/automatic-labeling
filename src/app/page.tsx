@@ -149,8 +149,9 @@ export default function MainPage() {
 
   return (
     <AuthWrapper>
-      <div className="flex">   
-        <Tabs>
+      <div className="flex"> {/* This will apply your global CSS */}
+        <div className="w-1/2"> {/* Left 50% */}
+          <Tabs>
             <TabContent label="ExcelFileReader">
               <ExcelFileReader onDataSelect={handleDataSelect} />
             </TabContent>
@@ -187,10 +188,13 @@ export default function MainPage() {
                 </div>
               </div>
             </TabContent>
-          </Tabs> 
-          
+          </Tabs>
+        </div>
+        
+        <div className="w-1/2"> {/* Right 50% */}
           <ControlPanel productionData={selectedRowData} />
         </div>
+      </div>
     </AuthWrapper>
   )
 }

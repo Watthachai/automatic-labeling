@@ -4,13 +4,20 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { logAudit } from '../lib/audit';
 
+interface Props {
+  productionData: SheetData | null;
+  onLogProduction?: (logData: ProductionLog) => void;
+}
+
 interface SheetData {
   [key: string]: string | number | undefined;
 }
 
-interface Props {
-  productionData: SheetData | null;
-  onLogProduction?: (logData: ProductionLog) => void;
+interface User {
+  id: string;
+  username: string;
+  hospitalId: string;
+  department: string;
 }
 
 export default function ControlUserPanelPage({ productionData }: Props) {
@@ -95,95 +102,135 @@ export default function ControlUserPanelPage({ productionData }: Props) {
 
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-4 space-y-4">
-
-      {/* Production Group Section */}
-      <div className="bg-gray-200 p-4 rounded-lg">
-        <div className="text-lg font-semibold mb-4">กลุ่มการผลิต</div>
-        <div className="grid grid-cols-2 gap-4">
-          {/* Left Panel */}
-          <div className="space-y-2">
-            <div className="bg-gray-500 text-cyan-300 p-2 text-center">
-              ผู้ควบคุมเครื่อง
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-gray-500 text-cyan-300 p-2">Material</div>
-              <div className="bg-gray-500 p-2">{material}</div>
-              <div className="bg-gray-500 text-cyan-300 p-2">Batch</div>
-              <div className="bg-gray-500 p-2">{batch}</div>
-            </div>
+    <div className="w-full max-w-4xl mx-auto p-6 space-y-6">
+      {/* User Info Header */}
+      <div className="bg-white shadow-lg rounded-lg p-4 border-l-4 border-blue-500">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-800">
+              Welcome, {user?.username}
+            </h2>
+            <p className="text-sm text-gray-600">
+              Hospital ID: {user?.hospitalId} • Department: {user?.department}
+            </p>
           </div>
-          
-          {/* Right Panel */}
-          <div className="space-y-2">
-            <div className="bg-gray-500 text-white p-2 text-center">
-              HEWWWW
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-gray-500 text-cyan-300 p-2">Material Name</div>
-              <div className="bg-gray-500 p-2">{materialDescription}</div>
-              <div className="bg-gray-500 text-cyan-300 p-2">Vendor Batch</div>
-              <div className="bg-gray-500 p-2">{vendorBatch}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Production Count Section */}
-      <div className="bg-pink-200 p-4 rounded-lg">
-        <div className="text-center text-2xl font-bold mb-4">ยอดการผลิต</div>
-        <div className="grid grid-cols-2 gap-4">
           <button
-            onClick={handleStart}
-            disabled={isRunning}
-            className={`p-4 rounded-lg ${
-              isRunning 
-                ? 'bg-gray-400 cursor-not-allowed' 
-                : 'bg-green-500 hover:bg-green-600'
-            } text-white font-bold text-xl`}
+            onClick={() => {
+              sessionStorage.removeItem('token');
+              router.push('/login');
+            }}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
           >
-            Start Production
-          </button>
-          <button
-            onClick={handleStop}
-            disabled={!isRunning}
-            className={`p-4 rounded-lg ${
-              !isRunning 
-                ? 'bg-gray-400 cursor-not-allowed' 
-                : 'bg-red-500 hover:bg-red-600'
-            } text-white font-bold text-xl`}
-          >
-            Stop Production
+            Sign Out
           </button>
         </div>
       </div>
 
-      {/* Camera Inspection Group */}
-      <div className="bg-teal-700 p-4 rounded-lg">
-        <div className="text-white text-lg font-semibold mb-4">กลุ่มตรวจด้วยกล้อง</div>
-        <div className="grid grid-cols-4 gap-4">
-          <div className="aspect-square bg-gray-300 border border-gray-400"></div>
-          <div className="aspect-square bg-gray-300 border border-gray-400"></div>
-          <div className="bg-white row-span-2 col-span-2"></div>
-          
-          <div className="col-span-2 bg-white h-8"></div>
-          <div className="col-span-2 bg-white h-8"></div>
-          
-          <div className="bg-gray-200 p-2 text-center">
-            <span className="text-pink-500">VisionSet</span>
-          </div>
-          <div className="bg-gray-200 p-2 text-center">
-            <span className="text-pink-500">ReadData</span>
-          </div>
-          <div className="col-span-2 bg-gray-500 p-2 text-center text-gray-300">
-            ....
-          </div>
+      {/* Production Details Card */}
+      <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+          <h3 className="text-lg font-semibold text-white">Production Details</h3>
         </div>
-        
-        <div className="mt-4 bg-pink-200 p-2 text-center w-32 ml-auto">
-          ผลการอ่านQRcode
+        <div className="p-6 grid md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <label className="text-sm font-medium text-gray-500">Material</label>
+              <p className="text-lg font-semibold text-gray-900">{material || 'N/A'}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <label className="text-sm font-medium text-gray-500">Batch Number</label>
+              <p className="text-lg font-semibold text-gray-900">{batch || 'N/A'}</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <label className="text-sm font-medium text-gray-500">Material Description</label>
+              <p className="text-lg font-semibold text-gray-900">{materialDescription || 'N/A'}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <label className="text-sm font-medium text-gray-500">Vendor Batch</label>
+              <p className="text-lg font-semibold text-gray-900">{vendorBatch || 'N/A'}</p>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Production Controls */}
+      <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+        <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4">
+          <h3 className="text-lg font-semibold text-white">Production Controls</h3>
+        </div>
+        <div className="p-6">
+          <div className="flex flex-col md:flex-row gap-6">
+            {/* Start Button */}
+            <button
+              onClick={handleStart}
+              disabled={isRunning}
+              className={`flex-1 p-6 rounded-lg transition-all transform hover:scale-105 ${
+                isRunning
+                  ? 'bg-gray-100 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg'
+              }`}
+            >
+              <div className="text-white text-center">
+                <div className="text-2xl font-bold mb-2">Start Production</div>
+                <div className="text-sm opacity-90">Current Count: {startCount}</div>
+              </div>
+            </button>
+
+            {/* Stop Button */}
+            <button
+              onClick={handleStop}
+              disabled={!isRunning}
+              className={`flex-1 p-6 rounded-lg transition-all transform hover:scale-105 ${
+                !isRunning
+                  ? 'bg-gray-100 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 shadow-lg'
+              }`}
+            >
+              <div className="text-white text-center">
+                <div className="text-2xl font-bold mb-2">Stop Production</div>
+                <div className="text-sm opacity-90">Current Count: {stopCount}</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Production Stats */}
+      {isRunning && (
+        <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+          <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
+            <h3 className="text-lg font-semibold text-white">Live Statistics</h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-purple-50 rounded-lg p-4 text-center">
+                <div className="text-sm font-medium text-purple-600">Start Time</div>
+                <div className="text-lg font-bold text-purple-900">
+                  {startTime?.toLocaleTimeString()}
+                </div>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-4 text-center">
+                <div className="text-sm font-medium text-purple-600">Duration</div>
+                <div className="text-lg font-bold text-purple-900">
+                  {startTime ? Math.floor((Date.now() - startTime.getTime()) / 60000) : 0} min
+                </div>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-4 text-center">
+                <div className="text-sm font-medium text-purple-600">Units Produced</div>
+                <div className="text-lg font-bold text-purple-900">
+                  {parseInt(stopCount) - parseInt(startCount)}
+                </div>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-4 text-center">
+                <div className="text-sm font-medium text-purple-600">Status</div>
+                <div className="text-lg font-bold text-green-600">Active</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-};
+}
