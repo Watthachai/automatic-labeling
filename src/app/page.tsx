@@ -63,7 +63,7 @@ export default function MainPage() {
       const ports = await navigator.serial.getPorts();
       if (ports.length > 0) {
         const testPort = ports[0];
-        await testPort.open({ baudRate: 9600 });
+        await testPort.open({ baudRate: 115200 });
   
         // Validation: Try a small write to check if the port is functional
         const writer = testPort.writable?.getWriter();
@@ -97,7 +97,7 @@ export default function MainPage() {
       const ports = await navigator.serial.getPorts();
       if (ports.length > 0) {
         const testPort = ports[0];
-        await testPort.open({ baudRate: 9600 });
+        await testPort.open({ baudRate: 115200 });
   
         // Validation: Try a small write to check if the port is functional
         const writer = testPort.writable?.getWriter();
