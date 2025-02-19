@@ -12,7 +12,8 @@
 
 # testing
 /coverage
-
+/scripts/*
+/automatic-labeling/scripts/
 # next.js
 /.next/
 /out/

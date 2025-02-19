@@ -16,7 +16,7 @@ export function generateToken(payload: TokenPayload): string {
     payload,
     process.env.JWT_SECRET,
     { 
-      expiresIn: '8h',  // Token expires in 8 hours
+      expiresIn: '7d',  // Token expires in 7 days
       algorithm: 'HS256' // Use HMAC SHA256 algorithm
     }
   );
