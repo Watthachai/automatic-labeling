@@ -1,66 +1,63 @@
 import { NextResponse } from 'next/server';
-import { verify2FACode, generateToken } from '@/lib/auth';
-import { logAudit } from '@/app/lib/audit';
+import { PrismaClient } from '@prisma/client';
+import { generateToken } from '@/lib/auth';
 
-interface VerifyRequestBody {
+const prisma = new PrismaClient();
+
+interface Verify2FARequest {
   userId: string;
   code: string;
 }
 
 export async function POST(request: Request) {
   try {
-    const { userId, code } = await request.json() as VerifyRequestBody;
+    const { userId, code } = await request.json() as Verify2FARequest;
 
     if (!userId || !code) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'User ID and verification code are required' },
         { status: 400 }
       );
     }
 
-    const isValid = await verify2FACode(userId, code);
+    const validCode = await prisma.twoFactorCode.findFirst({
+      where: {
+        userId,
+        code,
+        isUsed: false,
+        expiresAt: {
+          gt: new Date()
+        }
+      }
+    });
 
-    // Log the verification attempt
-    await logAudit(
-      userId,
-      isValid ? 'SUCCESS_2FA' : 'FAILED_2FA',
-      `2FA verification attempt with code ${code}`,
-      undefined,
-      request.headers.get('x-forwarded-for') || 'unknown'
-    );
-
-    if (!isValid) {
+    if (!validCode) {
       return NextResponse.json(
-        { error: 'Invalid or expired code' },
-        { status: 400 }
+        { error: 'Invalid or expired verification code' },
+        { status: 401 }
       );
     }
 
+    // Mark code as used
+    await prisma.twoFactorCode.update({
+      where: { id: validCode.id },
+      data: { isUsed: true }
+    });
+
+    // Generate token
     const token = await generateToken(userId);
     if (!token) {
-      await logAudit(
-        userId,
-        'TOKEN_GENERATION_FAILED',
-        'Failed to generate token after successful 2FA',
-        undefined,
-        request.headers.get('x-forwarded-for') || 'unknown'
-      );
-      
-      return NextResponse.json(
-        { error: 'Token generation failed' },
-        { status: 500 }
-      );
+      throw new Error('Failed to generate token');
     }
 
-    await logAudit(
-      userId,
-      'LOGIN_SUCCESS',
-      'Successfully logged in with 2FA',
-      undefined,
-      request.headers.get('x-forwarded-for') || 'unknown'
-    );
+    // Update last login
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastLogin: new Date() }
+    });
 
     return NextResponse.json({ token });
+
   } catch (error) {
     console.error('2FA verification error:', error);
     return NextResponse.json(

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { ReactNode } from 'react';
 import "./globals.css";
-import { initializeDatabase } from './lib/initDb';
 import AuthWrapper from './components/AuthWrapper';
+import { ArduinoProvider } from './contexts/ArduinoContext';
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -26,15 +26,13 @@ interface RootLayoutProps {
 }
 
 export default function RootLayout({ children }: RootLayoutProps) {
-  // Initialize database when app starts
-  if (typeof window !== 'undefined') {
-    initializeDatabase();
-  }
 
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AuthWrapper>{children}</AuthWrapper>
+        <ArduinoProvider>
+          <AuthWrapper>{children}</AuthWrapper>
+        </ArduinoProvider>
       </body>
     </html>
   );

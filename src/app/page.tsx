@@ -1,5 +1,5 @@
-// page.tsx
 'use client'
+
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation';
 import ExcelFileReader from '@/app/components/ExcelFileReaderPage';
@@ -8,149 +8,44 @@ import Tabs from '@/app/components/Tabs';
 import ManualRobot from './components/ManualRobotPage';
 import ProductionLogPage from './components/ProductionLogPage';
 import AuthWrapper from './components/AuthWrapper';
+import { ArduinoProvider, useArduino } from './contexts/ArduinoContext';
 
 interface SheetData {
-  [key: string]: string | number | undefined; // Make sure types match your data
+  [key: string]: string | number | undefined;
 }
 
-
-export default function MainPage() {
-  const [port, setPort] = useState<SerialPort | null>(null)
-  const [logs, setLogs] = useState<string[]>([])
-  const [status, setStatus] = useState('Disconnected')
-  const [selectedRowData, setSelectedRowData] = useState<SheetData | null>(null)
-  const TabContent: React.FC<{ label: string; children: React.ReactNode }> = ({ children }) => <>{children}</>;
-
+function MainPageContent() {
+  const [selectedRowData, setSelectedRowData] = useState<SheetData | null>(null);
   const router = useRouter();
+  const { connect, disconnect } = useArduino();
+  
+  const TabContent: React.FC<{ label: string; children: React.ReactNode }> = 
+    ({ children }) => <>{children}</>;
 
   useEffect(() => {
     const token = sessionStorage.getItem('token');
     if (!token) {
       router.push('/login');
+      return;
     }
-  }, [router]);
 
-  const addLog = (message: string) => {
-    setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])
-  }
+    // Connect to Arduino when component mounts
+    connect();
 
-  const startReading = useCallback(async (port: SerialPort) => {
-    let accumulatedText = ''
-    while (port.readable) {
-      const reader = port.readable.getReader()
-      try {
-        while (true) {
-          const { value, done } = await reader.read()
-          if (done) break
-          const text = new TextDecoder().decode(value)
-          accumulatedText += text
-          if (accumulatedText.includes('\n')) {
-            const lines = accumulatedText.split('\n')
-            lines.forEach((line, index) => {
-              if (index < lines.length - 1) {
-                addLog(`Received: ${line}`)
-              } else {
-                accumulatedText = line
-              }
-            })
-          }
-        }
-      } catch (err) {
-        addLog('Read error: ' + err)
-        if ((err as Error).name === 'NetworkError') {
-          setStatus('Disconnected')
-          setConnected(false)
-          attemptReconnect()
-        }
-      } finally {
-        reader.releaseLock()
-      }
-    }
-  }, [])
-
-  const autoConnect = async () => {
-    try {
-      const ports = await navigator.serial.getPorts();
-      if (ports.length > 0) {
-        const testPort = ports[0];
-        await testPort.open({ baudRate: 115200 });
-  
-        // Validation: Try a small write to check if the port is functional
-        const writer = testPort.writable?.getWriter();
-        if (writer) {
-          const testMessage = new TextEncoder().encode('test\n');
-          await writer.write(testMessage);
-          writer.releaseLock();
-        } else {
-          throw new Error('Failed to verify the port');
-        }
-  
-        setPort(testPort);
-        setConnected(true);
-        setStatus('Connected');
-        addLog('Auto-connected to Arduino');
-        startReading(testPort);
-      } else {
-        throw new Error('No ports available for auto-connect');
-      }
-    } catch (err) {
-      setStatus('Connection failed');
-      addLog('Auto-connect failed: ' + err);
-    }
-  };
-  
-
-  const attemptReconnect = async () => {
-    setStatus('Reconnecting...');
-    addLog('Attempting to reconnect...');
-    try {
-      const ports = await navigator.serial.getPorts();
-      if (ports.length > 0) {
-        const testPort = ports[0];
-        await testPort.open({ baudRate: 115200 });
-  
-        // Validation: Try a small write to check if the port is functional
-        const writer = testPort.writable?.getWriter();
-        if (writer) {
-          const testMessage = new TextEncoder().encode('test\n');
-          await writer.write(testMessage);
-          writer.releaseLock();
-        } else {
-          throw new Error('Failed to verify the port');
-        }
-  
-        // If validation is successful, set the port and start reading
-        setPort(testPort);
-        setConnected(true);
-        setStatus('Connected');
-        addLog('Reconnected to Arduino');
-        startReading(testPort);
-      } else {
-        throw new Error('No ports found during reconnection \n Reconnecting... in 5 seconds');
-      }
-    } catch (err) {
-      setStatus('Reconnection failed');
-      addLog('Reconnection error: ' + err);
-      setTimeout(attemptReconnect, 5000); // Retry after a delay
-    }
-  };
-  
-
-  useEffect(() => {
-    autoConnect()
     return () => {
-      if (port) port.close()
-    }
-  }, [])
+      // Cleanup Arduino connection when component unmounts
+      disconnect();
+    };
+  }, [router, connect, disconnect]);
 
-  const handleDataSelect = (data: SheetData) => {
+  const handleDataSelect = useCallback((data: SheetData) => {
     setSelectedRowData(data);
-  };
+  }, []);
 
   return (
     <AuthWrapper>
-      <div className="flex"> {/* This will apply your global CSS */}
-        <div className="w-1/2"> {/* Left 50% */}
+      <div className="flex">
+        <div className="w-1/2">
           <Tabs>
             <TabContent label="ExcelFileReader">
               <ExcelFileReader onDataSelect={handleDataSelect} />
@@ -161,40 +56,22 @@ export default function MainPage() {
             <TabContent label="debug mode">
               <ManualRobot />
             </TabContent>
-            <TabContent label='Arduino Status'>
-              <div className="w-full max-w-4xl mx-auto p-4 space-y-4">
-                <div className="bg-gray-200 p-4 rounded-lg">
-                  <div className="text-lg font-semibold mb-4">Arduino Status</div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="bg-gray-500 text-cyan-300 p-2 text-center">
-                        Connection Status
-                      </div>
-                      <div className="bg-gray-500 p-2">{status}</div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="bg-gray-500 text-cyan-300 p-2 text-center">
-                        Connection Logs
-                      </div>
-                      <div className="bg-gray-500 p-2">
-                        <div className="h-40 overflow-y-auto">
-                          {logs.map((log, index) => (
-                            <div key={index}>{log}</div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </TabContent>
+      
           </Tabs>
         </div>
         
-        <div className="w-1/2"> {/* Right 50% */}
+        <div className="w-1/2">
           <ControlPanel productionData={selectedRowData} />
         </div>
       </div>
     </AuthWrapper>
-  )
+  );
+}
+
+export default function MainPage() {
+  return (
+    <ArduinoProvider>
+      <MainPageContent />
+    </ArduinoProvider>
+  );
 }

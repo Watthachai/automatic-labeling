@@ -8,37 +8,64 @@ generator client {
 }
 
 model User {
-  id            String          @id @default(cuid())
-  username      String          @unique
-  password      String
-  role          Role           @default(OPERATOR)
-  hospitalId    String
-  department    String
-  phoneNumber   String    
-  createdAt     DateTime       @default(now())
-  lastLogin     DateTime?
-  isActive      Boolean        @default(true)
-  is2FAEnabled  Boolean        @default(true)
-  productions   Production[]
-  auditLogs     AuditLog[]
-  twoFactorCodes TwoFactorCode[] // Add this relation
+  id              String           @id @default(cuid())
+  username        String           @unique
+  password        String
+  role            Role            @default(OPERATOR)
+  hospitalId      String
+  department      String
+  phoneNumber     String?  // Make phone number optional
+  createdAt       DateTime        @default(now())
+  lastLogin       DateTime?
+  isActive        Boolean         @default(true)
+  is2FAEnabled    Boolean         @default(false)  // Disable 2FA by default
+  activeProductions ActiveProduction[] // Rename from productions
+  completedLogs    ProductionLog[]
+  auditLogs        AuditLog[]
+  twoFactorCodes   TwoFactorCode[]
+  updatedAt        DateTime        @updatedAt
 }
 
-model Production {
-  id                String   @id @default(cuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id])
-  material         String
-  batch            String
-  vendorBatch      String
-  startTime        DateTime
-  endTime          DateTime?
-  startCount       Int
-  endCount         Int?
-  status           Status   @default(IN_PROGRESS)
-  verifiedBy       String?
-  verifiedAt       DateTime?
-  auditLogs        AuditLog[]
+model ActiveProduction {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  material     String
+  batch        String
+  vendorBatch  String
+  startTime    DateTime
+  endTime      DateTime?
+  startCount   Int
+  endCount     Int?
+  status       Status    @default(IN_PROGRESS)
+  verifiedBy   String?
+  verifiedAt   DateTime?
+  auditLogs    AuditLog[]
+
+  @@index([status])
+  @@index([batch])
+}
+
+model ProductionLog {
+  id                  String   @id @default(cuid())
+  userId              String
+  username            String
+  date                String
+  startTime           String
+  endTime             String
+  startCount          Int
+  endCount            Int
+  totalProduced       Int
+  material            String?
+  batch               String?
+  vendorBatch         String?
+  materialDescription String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id])
+
+  @@index([date])
+  @@index([userId])
 }
 
 model AuditLog {
@@ -48,19 +75,26 @@ model AuditLog {
   action       String
   details      String
   productionId String?
-  production   Production? @relation(fields: [productionId], references: [id])
+  production   ActiveProduction? @relation(fields: [productionId], references: [id])
   ipAddress    String
   createdAt    DateTime   @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 model TwoFactorCode {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
   code      String
-  expiresAt DateTime
-  used      Boolean  @default(false)
   createdAt DateTime @default(now())
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([code])
 }
 
 enum Role {
