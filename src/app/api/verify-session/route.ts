@@ -1,6 +1,6 @@
 // src/app/api/verify-session/route.ts
 import { NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken } from '@/src/app/libs/auth';
 
 export async function GET(request: Request) {
   try {

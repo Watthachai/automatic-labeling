@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma } from '@/src/app/libs/prisma';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -52,27 +52,24 @@ interface ProductionLogInput {
 export async function POST(request: Request) {
   try {
     const data = await request.json() as ProductionLogInput;
-    const log = await prisma.productionLog.create({
+
+    const productionLog = await prisma.productionLog.create({
       data: {
-        date: data.date,
-        userId: data.userId,
-        material: data.material,
-        materialDescription: data.materialDescription,
-        startTime: data.startTime,
-        endTime: data.endTime,
-        username: data.username,
+        ...data,
+        startTime: new Date(data.startTime),
+        endTime: new Date(data.endTime),
+        // Convert numbers to strings since Prisma schema expects strings
         startCount: data.startCount,
         endCount: data.endCount,
         totalProduced: data.totalProduced,
-        createdAt: new Date(),
-        updatedAt: new Date()
       }
     });
-    return NextResponse.json(log);
+
+    return NextResponse.json(productionLog);
   } catch (error) {
-    console.error('Failed to save production log:', error);
+    console.error('Production log error:', error);
     return NextResponse.json(
-      { error: 'Failed to save production log' },
+      { error: 'Failed to create production log' },
       { status: 500 }
     );
   }

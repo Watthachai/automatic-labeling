@@ -1,64 +1,40 @@
-import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
-import { generateToken } from '@/lib/auth';
+import { PrismaClient } from '@prisma/client'
+import { NextRequest, NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
-interface LoginRequest {
-  username: string;
-  password: string;
-  hospitalId: string;
-}
-
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { username, password, hospitalId } = await request.json() as LoginRequest;
-
-    if (!username || !password || !hospitalId) {
-      return NextResponse.json(
-        { error: 'All fields are required' },
-        { status: 400 }
-      );
-    }
+    const { username, password } = await req.json()
 
     const user = await prisma.user.findUnique({
       where: { username }
-    });
+    })
 
-    if (!user || !user.isActive || user.hospitalId !== hospitalId) {
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401 }
-      );
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const validPassword = await bcrypt.compare(password, user.password);
+    const validPassword = await bcrypt.compare(password, user.password)
     if (!validPassword) {
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Invalid password' }, { status: 401 })
     }
 
-    const token = await generateToken(user.id);
-    if (!token) {
-      throw new Error('Failed to generate token');
-    }
+    const token = jwt.sign(
+      {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        hospitalId: user.hospitalId
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: '8h' }
+    )
 
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLogin: new Date() }
-    });
-
-    return NextResponse.json({ token });
-
+    return NextResponse.json({ token })
   } catch (error) {
-    console.error('Login error:', error);
-    return NextResponse.json(
-      { error: 'Login failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

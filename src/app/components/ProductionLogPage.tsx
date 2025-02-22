@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import * as XLSX from 'xlsx';
+import { useArduino } from '../contexts/ArduinoContext';
 
 interface ProductionLog {
   id?: string;
@@ -25,6 +26,12 @@ const ProductionLogPage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [production, setProduction] = useState({
+    targetCount: 0,
+    currentCount: 0,
+    isRunning: false
+  });
+  const { connected, sendCommand } = useArduino();
 
   const fetchLogs = useCallback(async (date: string) => {
     setIsLoading(true);
@@ -52,16 +59,83 @@ const ProductionLogPage: React.FC = () => {
     fetchLogs(selectedDate);
   }, [selectedDate, fetchLogs]);
 
-  const exportToExcel = useCallback(() => {
-    if (logs.length === 0) return;
-    
-    const worksheet = XLSX.utils.json_to_sheet(logs);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Production Logs');
-    
-    const filename = `production_logs_${selectedDate}.xlsx`;
-    XLSX.writeFile(workbook, filename);
+  const exportToExcel = useCallback(async () => {
+    try {
+      // Prepare data for export, excluding large fields
+      const exportData = logs.map(log => ({
+        Date: new Date(log.startTime).toLocaleDateString(),
+        Time: new Date(log.startTime).toLocaleTimeString(),
+        Material: log.material,
+        'Material Description': log.materialDescription,
+        Batch: log.batch,
+        'Vendor Batch': log.vendorBatch,
+        'Units Produced': log.totalProduced,
+        Operator: log.username,
+        Duration: `${Math.floor((new Date(log.endTime).getTime() - new Date(log.startTime).getTime()) / 60000)} min`
+      }));
+
+      // Create Excel workbook
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Add column widths
+      ws['!cols'] = [
+        { wch: 12 }, // Date
+        { wch: 10 }, // Time
+        { wch: 15 }, // Material
+        { wch: 30 }, // Material Description
+        { wch: 15 }, // Batch
+        { wch: 15 }, // Vendor Batch
+        { wch: 15 }, // Units Produced
+        { wch: 20 }, // Operator
+        { wch: 10 }  // Duration
+      ];
+
+      // Add workbook to sheet
+      XLSX.utils.book_append_sheet(wb, ws, 'Production Logs');
+
+      // Save file
+      XLSX.writeFile(wb, `production_logs_${selectedDate}.xlsx`);
+
+    } catch (error) {
+      console.error('Export error:', error);
+      setError('Failed to export data');
+    }
   }, [logs, selectedDate]);
+
+  const handleStartProduction = async (productionData: any) => {
+    try {
+      const response = await fetch('/api/production/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          materialId: productionData.Material,
+          batch: productionData.Batch,
+          targetCount: productionData.targetCount
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start production');
+      }
+
+      const data = await response.json();
+      setProduction({
+        ...production,
+        isRunning: true,
+        targetCount: data.targetCount
+      });
+
+      // Start Arduino counting
+      if (connected) {
+        sendCommand('START');
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   return (
     <div className="bg-white shadow-lg rounded-lg overflow-hidden">

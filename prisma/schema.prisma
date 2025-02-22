@@ -7,40 +7,57 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum Role {
+  ADMIN
+  SUPERVISOR
+  OPERATOR
+  PHARMACIST
+}
+
+enum Status {
+  IN_PROGRESS
+  COMPLETED
+  VERIFIED
+  REJECTED
+  CANCELLED
+}
+
 model User {
-  id              String           @id @default(cuid())
-  username        String           @unique
-  password        String
-  role            Role            @default(OPERATOR)
-  hospitalId      String
-  department      String
-  phoneNumber     String?  // Make phone number optional
-  createdAt       DateTime        @default(now())
-  lastLogin       DateTime?
-  isActive        Boolean         @default(true)
-  is2FAEnabled    Boolean         @default(false)  // Disable 2FA by default
+  id                String             @id @default(cuid())
+  username          String             @unique
+  password          String
+  role              Role               @default(OPERATOR)
+  hospitalId        String
+  hospital          Hospital           @relation(fields: [hospitalId], references: [id])
+  department        String
+  phoneNumber       String? // Make phone number optional
+  createdAt         DateTime           @default(now())
+  lastLogin         DateTime?
+  isActive          Boolean            @default(true)
+  is2FAEnabled      Boolean            @default(false) // Disable 2FA by default
   activeProductions ActiveProduction[] // Rename from productions
-  completedLogs    ProductionLog[]
-  auditLogs        AuditLog[]
-  twoFactorCodes   TwoFactorCode[]
-  updatedAt        DateTime        @updatedAt
+  completedLogs     ProductionLog[]
+  auditLogs         AuditLog[]
+  twoFactorCodes    TwoFactorCode[]
+  productions       Production[] // Add this line to complete the relation
+  updatedAt         DateTime           @updatedAt
 }
 
 model ActiveProduction {
-  id           String    @id @default(cuid())
-  userId       String
-  user         User      @relation(fields: [userId], references: [id])
-  material     String
-  batch        String
-  vendorBatch  String
-  startTime    DateTime
-  endTime      DateTime?
-  startCount   Int
-  endCount     Int?
-  status       Status    @default(IN_PROGRESS)
-  verifiedBy   String?
-  verifiedAt   DateTime?
-  auditLogs    AuditLog[]
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  material    String
+  batch       String
+  vendorBatch String
+  startTime   DateTime
+  endTime     DateTime?
+  startCount  Int
+  endCount    Int?
+  status      Status     @default(IN_PROGRESS)
+  verifiedBy  String?
+  verifiedAt  DateTime?
+  auditLogs   AuditLog[]
 
   @@index([status])
   @@index([batch])
@@ -51,8 +68,8 @@ model ProductionLog {
   userId              String
   username            String
   date                String
-  startTime           String
-  endTime             String
+  startTime           DateTime
+  endTime             DateTime
   startCount          Int
   endCount            Int
   totalProduced       Int
@@ -60,24 +77,24 @@ model ProductionLog {
   batch               String?
   vendorBatch         String?
   materialDescription String?
+  qrCodeData          String?  @db.Text
+  qrCodeImage         String?  @db.Text
+  serialNumbers       String[]
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   user                User     @relation(fields: [userId], references: [id])
-
-  @@index([date])
-  @@index([userId])
 }
 
 model AuditLog {
-  id           String     @id @default(cuid())
+  id           String            @id @default(cuid())
   userId       String
-  user         User       @relation(fields: [userId], references: [id])
+  user         User              @relation(fields: [userId], references: [id])
   action       String
   details      String
-  productionId String?
+  productionId String?          // Optional field
   production   ActiveProduction? @relation(fields: [productionId], references: [id])
   ipAddress    String
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime          @default(now())
 
   @@index([userId])
   @@index([action])
@@ -97,16 +114,30 @@ model TwoFactorCode {
   @@index([code])
 }
 
-enum Role {
-  ADMIN
-  SUPERVISOR
-  OPERATOR
-  PHARMACIST
+model Production {
+  id          String    @id @default(cuid())
+  materialId  String
+  material    Material  @relation(fields: [materialId], references: [id])
+  batch       String
+  targetCount Int
+  actualCount Int       @default(0)
+  status      Status    @default(IN_PROGRESS)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
 }
 
-enum Status {
-  IN_PROGRESS
-  COMPLETED
-  VERIFIED
-  REJECTED
+model Material {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  description String
+  unit        String
+  productions Production[]
+}
+
+model Hospital {
+  id    String @id @default(cuid())
+  name  String @unique
+  users User[]
 }

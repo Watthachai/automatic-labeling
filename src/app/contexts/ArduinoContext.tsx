@@ -1,153 +1,173 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 
-export interface ArduinoContextType {
+interface SerialPort {
+  readable: ReadableStream<Uint8Array>;
+  writable: WritableStream<Uint8Array>;
+  open: (options: { baudRate: number }) => Promise<void>;
+  close: () => Promise<void>;
+}
+
+type CustomSerialPort = SerialPort & {
+  readable: ReadableStream<Uint8Array>;
+};
+
+// Define types
+interface ArduinoContextType {
   status: string;
   connected: boolean;
   logs: string[];
-  availablePorts: SerialPort[];
-  sendCommand: (command: string) => Promise<void>;
-  requestPort: () => Promise<SerialPort>;
-  connect: () => Promise<void>;
+  requestPort: () => Promise<void>;
   disconnect: () => Promise<void>;
+  sendCommand: (command: string) => Promise<void>;
 }
 
+// Create context
 const ArduinoContext = createContext<ArduinoContextType | null>(null);
 
-export function ArduinoProvider({ children }: { children: React.ReactNode }) {
-  const [port, setPort] = useState<SerialPort | null>(null);
-  const [status, setStatus] = useState('Disconnected');
-  const [logs, setLogs] = useState<string[]>([]);
-  const [connected, setConnected] = useState(false);
-  const [availablePorts, setAvailablePorts] = useState<SerialPort[]>([]);
+// Custom hook
+export function useArduino() {
+  const context = useContext(ArduinoContext);
+  if (!context) {
+    throw new Error('useArduino must be used within ArduinoProvider');
+  }
+  return context;
+}
 
+export function ArduinoProvider({ children }: { children: React.ReactNode }) {
+  // State
+  const [port, setPort] = useState<SerialPort | null>(null);
+  const [status, setStatus] = useState('Awaiting port selection');
+  const [connected, setConnected] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+
+  // Utility function for logging
   const addLog = useCallback((message: string) => {
-    setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs(prev => [...prev, `${timestamp}: ${message}`]);
   }, []);
 
+  // Handle serial port reading
   const startReading = useCallback(async (port: SerialPort) => {
-    let accumulatedText = '';
-    while (port.readable) {
+    if (!port?.readable) return;
+
+    try {
       const reader = port.readable.getReader();
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const text = new TextDecoder().decode(value);
-          accumulatedText += text;
-          if (accumulatedText.includes('\n')) {
-            const lines = accumulatedText.split('\n');
-            lines.forEach((line, index) => {
-              if (index < lines.length - 1) {
-                addLog(`Received: ${line}`);
-              } else {
-                accumulatedText = line;
-              }
-            });
-          }
+      readerRef.current = reader;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const text = new TextDecoder().decode(value);
+        if (text.trim()) {
+          addLog(`Received: ${text.trim()}`);
         }
-      } catch (err) {
-        addLog('Read error: ' + err);
-        if ((err as Error).name === 'NetworkError') {
-          setStatus('Disconnected');
-          setConnected(false);
-          autoConnect();
-        }
-      } finally {
-        reader.releaseLock();
+      }
+    } catch (err) {
+      console.error('Read error:', err);
+    } finally {
+      if (readerRef.current) {
+        readerRef.current.releaseLock();
+        readerRef.current = null;
       }
     }
   }, [addLog]);
 
-  const autoConnect = useCallback(async () => {
+  // Request and connect to port
+  const requestPort = useCallback(async () => {
     try {
-      const ports = await navigator.serial.getPorts();
-      if (ports.length > 0) {
-        const testPort = ports[0];
-        await testPort.open({ baudRate: 115200 });
-
-        const writer = testPort.writable?.getWriter();
-        if (writer) {
-          const testMessage = new TextEncoder().encode('test\n');
-          await writer.write(testMessage);
-          writer.releaseLock();
-        } else {
-          throw new Error('Failed to verify port');
-        }
-
-        setPort(testPort);
-        setConnected(true);
-        setStatus('Connected');
-        addLog('Auto-connected to Arduino');
-        startReading(testPort);
+      setStatus('Selecting port...');
+      const selectedPort = await navigator.serial.requestPort();
+      
+      await selectedPort.open({ baudRate: 115200 });
+      if (selectedPort.readable) {
+        setPort(selectedPort);
+      } else {
+        setPort(selectedPort as SerialPort);
       }
+      setConnected(true);
+      setStatus('Connected');
+      addLog('Connected to Arduino');
+      
+      startReading(selectedPort);
     } catch (err) {
-      setStatus('Connection failed');
-      addLog('Auto-connect failed: ' + err);
+      if (err instanceof Error) {
+        if (err.message.includes('No port selected')) {
+          setStatus('Awaiting port selection');
+        } else {
+          setStatus('Connection failed');
+          addLog(`Connection error: ${err.message}`);
+        }
+      }
+      throw err;
     }
   }, [addLog, startReading]);
 
-  const sendCommand = async (command: string) => {
+  // Disconnect from port
+  const disconnect = useCallback(async () => {
+    if (readerRef.current) {
+      try {
+        await readerRef.current.cancel();
+        readerRef.current.releaseLock();
+      } catch (err) {
+        console.error('Error cleaning up reader:', err);
+      }
+      readerRef.current = null;
+    }
+
+    if (port) {
+      try {
+        await port.close();
+      } catch (err) {
+        console.error('Error closing port:', err);
+      }
+    }
+
+    setPort(null);
+    setConnected(false);
+    setStatus('Awaiting port selection');
+    addLog('Disconnected from Arduino');
+  }, [port, addLog]);
+
+  // Send command to Arduino
+  const sendCommand = useCallback(async (command: string) => {
     if (!port || !connected) {
       addLog('Error: Not connected to Arduino');
       return;
     }
 
     try {
-      const writer = port.writable?.getWriter();
-      if (writer) {
-        const data = new TextEncoder().encode(`${command}\n`);
+      console.log('Sending command:', command); // Add this log
+      const writer = port.writable.getWriter();
+      try {
+        const data = new TextEncoder().encode(command + '\n');
         await writer.write(data);
+        addLog(`Sent: ${command}`);
+      } finally {
         writer.releaseLock();
-        addLog(`Sent command: ${command}`);
       }
     } catch (err) {
-      addLog(`Error sending command: ${err}`);
-      setStatus('Send failed');
+      addLog(`Send error: ${err}`);
+      console.error('Send error:', err);
     }
-  };
+  }, [port, connected, addLog]);
 
-  useEffect(() => {
-    autoConnect();
-    return () => {
-      if (port) port.close();
-    };
-  }, [autoConnect, port]);
+  // Context value
   const value = {
     status,
-    logs,
     connected,
-    availablePorts,
-    connect: autoConnect,
-    disconnect: async () => {
-      if (port) {
-        await port.close();
-        setPort(null);
-        setConnected(false);
-        setStatus('Disconnected');
-      }
-    },
-    requestPort: async () => {
-      try {
-        const port = await navigator.serial.requestPort();
-        setAvailablePorts([port]);
-        return port;
-      } catch (err) {
-        addLog('Error requesting port: ' + err);
-        throw err;
-      }
-    },
+    logs,
+    requestPort,
+    disconnect,
     sendCommand
   };
 
-  return <ArduinoContext.Provider value={value}>{children}</ArduinoContext.Provider>;
+  return (
+    <ArduinoContext.Provider value={value}>
+      {children}
+    </ArduinoContext.Provider>
+  );
 }
-
-export const useArduino = () => {
-  const context = useContext(ArduinoContext);
-  if (!context) {
-    throw new Error('useArduino must be used within an ArduinoProvider');
-  }
-  return context;
-};

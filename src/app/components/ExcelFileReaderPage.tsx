@@ -11,10 +11,11 @@ interface SheetData {
 }
 
 interface Props {
-  onDataSelect: (rowData: SheetData) => void;
+  onDataSelect: (rowData: SheetData, qrCodeDataUrl: string) => void;
+  onQrCodeGenerated?: (qrCodeUrl: string) => void;
 }
 
-const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
+const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect, onQrCodeGenerated }) => {
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [sheetData, setSheetData] = useState<SheetData[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
@@ -79,7 +80,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
     const qrCodeElement = (
       <QRCode
         value={qrCodeData}
-        size={150}
+        size={100} // Reduced size
         level="L"
       />
     );
@@ -106,6 +107,11 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
 
     const newQrCodeDataUrl = generateQrCodeDataUrl(selectedRowData);
     qrCodeDataUrlRef.current = newQrCodeDataUrl;
+
+    // Add this line to pass the QR code URL up
+    if (onQrCodeGenerated) {
+      onQrCodeGenerated(newQrCodeDataUrl);
+    }
 
     // Add content to the iframe
     iframeDocument.body.innerHTML = `
@@ -143,7 +149,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
     setTimeout(() => {
       document.body.removeChild(iframe);
     }, 100);
-  }, [generateQrCodeDataUrl, selectedRowData, convertExcelDateToJSDate]);
+  }, [generateQrCodeDataUrl, selectedRowData, convertExcelDateToJSDate, onQrCodeGenerated]);
 
   const togglePreview = useCallback(() => {
     setIsPreviewVisible(!isPreviewVisible);
@@ -154,7 +160,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
     setQrCodeDataUrl(newQrCodeDataUrl);
     qrCodeDataUrlRef.current = newQrCodeDataUrl;
     setSelectedRowData(row);
-    onDataSelect(row);
+    onDataSelect(row, newQrCodeDataUrl); // Pass QR code data URL
   }, [generateQrCodeDataUrl, onDataSelect]);
 
   return (
@@ -197,7 +203,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
             className="text-gray-400 hover:text-red-500"
           >
             <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 011.414 1.414L11.414 10l4.293 4.293a1 1 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
             </svg>
           </button>
         </div>
