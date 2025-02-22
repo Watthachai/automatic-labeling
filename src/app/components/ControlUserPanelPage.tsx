@@ -146,13 +146,13 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
         </div>
 
         <!-- Text Section -->
-        <div style="flex-grow: 1; padding-left: 1mm; font-size: 4pt; line-height: 1.2;">
+        <div style="flex-grow: 1; padding-left: 1mm; font-size: 5.5pt; line-height: 1.2;">
           <div style="font-weight: bold;">MAT:${qrData.Material}-UNIT:${qrData.Unit}</div>
           <div style="font-weight: bold;">BATCH:${qrData.Batch}</div>
           <div style="font-weight: bold;">${qrData["Material Description"]}</div>
 
           <!-- Details Grid -->
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5mm; margin-top: 0.5mm;">
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5mm; margin-top: 4mm;">
             <div>
               <div style="font-weight: bold;">UNIT</div>
               <div>${qrData.Unit}</div>
