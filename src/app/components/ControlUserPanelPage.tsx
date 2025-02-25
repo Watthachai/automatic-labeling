@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { logAudit } from '@/src/app/libs/audit';
 import { saveProductionLog } from '@/src/app/libs/productionLogs';
 import LoadingScreen from './LoadingScreen';
 import { useArduino } from '../contexts/ArduinoContext';
@@ -37,7 +36,6 @@ interface UserData {
   department: string;
 }
 
-// Add ProductionLogData interface
 interface ProductionLogData {
   userId: string;
   username: string;
@@ -54,9 +52,8 @@ interface ProductionLogData {
   qrCodeData: string;
   qrCodeImage: string;
   serialNumbers: string[];
-  [key: string]: string | number | boolean | Date | string[] | undefined;
+  [key: string]: string | number | boolean | string[] | undefined;
 }
-
 export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, onQrCodeGenerated }: Props) {
   
   const router = useRouter();
@@ -74,7 +71,8 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
   const [inputTargetCount, setInputTargetCount] = useState<string>(''); // Added state for input value
   const [printedCount, setPrintedCount] = useState(0); // Add state for tracking printed QR codes
   const [isPrinting, setIsPrinting] = useState(false);
-  const [lastPrintTime, setLastPrintTime] = useState<number>(0);
+  const [remainingPrints, setRemainingPrints] = useState(0); // จำนวนที่เหลือที่จะปริ้นในรอบนี้
+  const [totalPrints, setTotalPrints] = useState(0); // จำนวนที่ต้องการปริ้นทั้งหมด
 
   // Add new state for completion modal
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -104,9 +102,9 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
     return `data:image/svg+xml;base64,${btoa(qrCodeSVG)}`;
   }, []);
   
-  const handlePrintQR = useCallback(async (qrImage: string, qrData: any) => {
+  const handlePrintQR = useCallback(async (qrImage: string, qrData: SheetData, isBlank: boolean = false) => {
     if (isPrinting) return false;
-
+  
     try {
       setIsPrinting(true);
       
@@ -134,21 +132,40 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
         </style>
       `;
   
-      // In the handlePrintQR function, update the template
-      iframeDocument.body.innerHTML = `
+      iframeDocument.body.innerHTML = isBlank ? `
         <div class="print-section" style="width: 50mm; height: 20mm; display: flex; align-items: center; padding: 0mm; font-family: Arial, sans-serif;">
-          <!-- QR Code Section -->
+          <div style="width: 18mm; height: 18mm; flex-shrink: 0; margin: 1mm;">
+            <img src="" style="width: 100%; height: 100%; object-fit: contain;" />
+          </div>
+          <div style="flex-grow: 1; padding-left: 1mm; font-size: 5.5pt; line-height: 1.2;">
+            <div style="font-weight: bold;">MAT:</div>
+            <div style="font-weight: bold;">BATCH:</div>
+            <div style="font-weight: bold;"></div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5mm; margin-top: 4mm;">
+              <div>
+                <div style="font-weight: bold;">UNIT</div>
+                <div></div>
+              </div>
+              <div>
+                <div style="font-weight: bold;">Expire date</div>
+                <div></div>
+              </div>
+              <div>
+                <div style="font-weight: bold;">Vendor Batch</div>
+                <div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : `
+        <div class="print-section" style="width: 50mm; height: 20mm; display: flex; align-items: center; padding: 0mm; font-family: Arial, sans-serif;">
           <div style="width: 18mm; height: 18mm; flex-shrink: 0; margin: 1mm;">
             <img src="${qrCodeDataUrl}" style="width: 100%; height: 100%; object-fit: contain;" />
           </div>
-
-          <!-- Text Section -->
           <div style="flex-grow: 1; padding-left: 1mm; font-size: 5.5pt; line-height: 1.2;">
             <div style="font-weight: bold;">MAT:${qrData.Material}-UNIT:${qrData.Unit}</div>
             <div style="font-weight: bold;">BATCH:${qrData.Batch}</div>
             <div style="font-weight: bold;">${qrData["Material Description"]}</div>
-
-            <!-- Details Grid -->
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5mm; margin-top: 4mm;">
               <div>
                 <div style="font-weight: bold;">UNIT</div>
@@ -156,7 +173,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
               </div>
               <div>
                 <div style="font-weight: bold;">Expire date</div>
-                <div>${new Date((qrData["SLED/BBD"] - 25569) * 86400 * 1000).toLocaleDateString()}</div>
+                <div>${qrData["SLED/BBD"] ? new Date((qrData["SLED/BBD"] - 25569) * 86400 * 1000).toLocaleDateString() : 'N/A'}</div>
               </div>
               <div>
                 <div style="font-weight: bold;">Vendor Batch</div>
@@ -174,13 +191,13 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
           }
         };
   
-        // The handlePrintQR function logic for kiosk mode
         if (isKioskMode) {
           console.log('Printing in kiosk mode');
           iframe.contentWindow?.print();
           iframe.contentWindow?.addEventListener('afterprint', () => {
             cleanup();
             setPrintedCount(prev => prev + 1);
+            setRemainingPrints(prev => prev - 1);
             console.log(`Print completed: ${printedCount + 1}/${targetCount}`);
             resolve(true); // Always resolve true in kiosk mode
           });
@@ -190,6 +207,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
             if (document.body.contains(iframe)) {
               cleanup();
               setPrintedCount(prev => prev + 1);
+              setRemainingPrints(prev => prev - 1);
               console.log(`Print timeout - assuming completed: ${printedCount + 1}/${targetCount}`);
               resolve(true);
             }
@@ -201,6 +219,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
             iframe.contentWindow?.addEventListener('afterprint', () => {
               cleanup();
               setPrintedCount(prev => prev + 1);
+              setRemainingPrints(prev => prev - 1);
               console.log(`Print completed: ${printedCount + 1}/${targetCount}`);
               resolve(true);
             });
@@ -210,6 +229,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
               if (document.body.contains(iframe)) {
                 cleanup();
                 setPrintedCount(prev => prev + 1);
+                setRemainingPrints(prev => prev - 1);
                 console.log(`Print timeout - assuming completed: ${printedCount + 1}/${targetCount}`);
                 resolve(true);
               }
@@ -373,15 +393,15 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
   // แก้ไข Arduino monitoring effect
   useEffect(() => {
     if (!isRunning || isProcessing) return;
-
+  
     // Get the most recent log entry
     const lastMessage = logs[logs.length - 1];
     
-    if (lastMessage?.includes('111')) { // This checks for '111' response from Arduino
+    if (lastMessage?.includes('1')) { // This checks for '1' response from Arduino
       (async () => {
         try {
           setIsProcessing(true);
-          console.log('Processing item based on Arduino response 111');
+          console.log('Processing item based on Arduino response 1');
           
           // Generate QR code for the current item
           const qrData = { ...productionData };
@@ -412,6 +432,15 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
               console.log('Production paused due to print cancellation');
             }
           }
+  
+          // Check if we need to print more
+          if (remainingPrints <= 0 && nextCount < totalPrints) {
+            setRemainingPrints(Math.min(15, totalPrints - nextCount));
+            // Print blank labels if needed
+            for (let i = 0; i < Math.min(15, totalPrints - nextCount); i++) {
+              await handlePrintQR('', {}, true);
+            }
+          }
         } catch (error) {
           console.error('Error processing product:', error);
           setError('เกิดข้อผิดพลาดในการผลิต');
@@ -432,7 +461,9 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
     handlePrintQR,
     isPrinting,
     isProcessing,
-    isKioskMode
+    isKioskMode,
+    remainingPrints,
+    totalPrints
   ]);
 
   // แก้ไข handleStartProduction
@@ -444,6 +475,10 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
       if (!user?.id || !productionData?.Batch || !productionData?.Material) {
         throw new Error('ข้อมูลไม่ครบถ้วน');
       }
+  
+      // Set total prints and remaining prints
+      setTotalPrints(activeTarget);
+      setRemainingPrints(Math.min(15, activeTarget));
   
       // สร้างและพิมพ์ QR Code แรก
       const qrData = {
