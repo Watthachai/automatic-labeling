@@ -110,9 +110,6 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
     try {
       setIsPrinting(true);
       
-      // Use the passed qrCodeDataUrl if available
-      const qrImageToUse = qrImage || qrCodeDataUrl;
-      
       const iframe = document.createElement('iframe');
       iframe.style.display = 'none';
       document.body.appendChild(iframe);
@@ -138,36 +135,36 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
       `;
   
       // In the handlePrintQR function, update the template
-    iframeDocument.body.innerHTML = `
-      <div class="print-section" style="width: 50mm; height: 20mm; display: flex; align-items: center; padding: 0mm; font-family: Arial, sans-serif;">
-        <!-- QR Code Section -->
-        <div style="width: 18mm; height: 18mm; flex-shrink: 0; margin: 1mm;">
-          <img src="${qrCodeDataUrl}" style="width: 100%; height: 100%; object-fit: contain;" />
-        </div>
+      iframeDocument.body.innerHTML = `
+        <div class="print-section" style="width: 50mm; height: 20mm; display: flex; align-items: center; padding: 0mm; font-family: Arial, sans-serif;">
+          <!-- QR Code Section -->
+          <div style="width: 18mm; height: 18mm; flex-shrink: 0; margin: 1mm;">
+            <img src="${qrCodeDataUrl}" style="width: 100%; height: 100%; object-fit: contain;" />
+          </div>
 
-        <!-- Text Section -->
-        <div style="flex-grow: 1; padding-left: 1mm; font-size: 5.5pt; line-height: 1.2;">
-          <div style="font-weight: bold;">MAT:${qrData.Material}-UNIT:${qrData.Unit}</div>
-          <div style="font-weight: bold;">BATCH:${qrData.Batch}</div>
-          <div style="font-weight: bold;">${qrData["Material Description"]}</div>
+          <!-- Text Section -->
+          <div style="flex-grow: 1; padding-left: 1mm; font-size: 5.5pt; line-height: 1.2;">
+            <div style="font-weight: bold;">MAT:${qrData.Material}-UNIT:${qrData.Unit}</div>
+            <div style="font-weight: bold;">BATCH:${qrData.Batch}</div>
+            <div style="font-weight: bold;">${qrData["Material Description"]}</div>
 
-          <!-- Details Grid -->
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5mm; margin-top: 4mm;">
-            <div>
-              <div style="font-weight: bold;">UNIT</div>
-              <div>${qrData.Unit}</div>
-            </div>
-            <div>
-              <div style="font-weight: bold;">Expire date</div>
-              <div>${new Date((qrData["SLED/BBD"] - 25569) * 86400 * 1000).toLocaleDateString()}</div>
-            </div>
-            <div>
-              <div style="font-weight: bold;">Vendor Batch</div>
-              <div>${qrData["Vendor Batch"]}</div>
+            <!-- Details Grid -->
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5mm; margin-top: 4mm;">
+              <div>
+                <div style="font-weight: bold;">UNIT</div>
+                <div>${qrData.Unit}</div>
+              </div>
+              <div>
+                <div style="font-weight: bold;">Expire date</div>
+                <div>${new Date((qrData["SLED/BBD"] - 25569) * 86400 * 1000).toLocaleDateString()}</div>
+              </div>
+              <div>
+                <div style="font-weight: bold;">Vendor Batch</div>
+                <div>${qrData["Vendor Batch"]}</div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
       `;
   
       return new Promise<boolean>((resolve) => {
@@ -177,14 +174,26 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
           }
         };
   
+        // The handlePrintQR function logic for kiosk mode
         if (isKioskMode) {
+          console.log('Printing in kiosk mode');
           iframe.contentWindow?.print();
           iframe.contentWindow?.addEventListener('afterprint', () => {
             cleanup();
             setPrintedCount(prev => prev + 1);
             console.log(`Print completed: ${printedCount + 1}/${targetCount}`);
-            resolve(true);
+            resolve(true); // Always resolve true in kiosk mode
           });
+          
+          // Fallback timeout
+          setTimeout(() => {
+            if (document.body.contains(iframe)) {
+              cleanup();
+              setPrintedCount(prev => prev + 1);
+              console.log(`Print timeout - assuming completed: ${printedCount + 1}/${targetCount}`);
+              resolve(true);
+            }
+          }, 5000);
         } else {
           const shouldPrint = window.confirm('พิมพ์ QR Code?');
           if (shouldPrint) {
@@ -195,6 +204,16 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
               console.log(`Print completed: ${printedCount + 1}/${targetCount}`);
               resolve(true);
             });
+            
+            // Add a fallback timeout in case afterprint doesn't fire
+            setTimeout(() => {
+              if (document.body.contains(iframe)) {
+                cleanup();
+                setPrintedCount(prev => prev + 1);
+                console.log(`Print timeout - assuming completed: ${printedCount + 1}/${targetCount}`);
+                resolve(true);
+              }
+            }, 5000);
           } else {
             cleanup();
             resolve(false);
@@ -353,48 +372,45 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
 
   // แก้ไข Arduino monitoring effect
   useEffect(() => {
-    if (!logs.length || !isRunning) return;
-  
-    const lastLog = logs[logs.length - 1];
-    console.log('Arduino log received:', lastLog);
-  
-    if (lastLog.includes('112') && !isPrinting && !isProcessing) {
+    if (!isRunning || isProcessing) return;
+
+    // Get the most recent log entry
+    const lastMessage = logs[logs.length - 1];
+    
+    if (lastMessage?.includes('111')) { // This checks for '111' response from Arduino
       (async () => {
         try {
           setIsProcessing(true);
-  
-          // ตรวจสอบจำนวนปัจจุบันก่อนเพิ่ม
-          const nextCount = parseInt(currentCount) + 1;
-          console.log(`Processing item ${nextCount} of ${targetCount}`);
-  
-          // สร้างข้อมูล QR
-          const qrData = {
-            ...productionData,
-            serialNumber: `${productionData?.Batch}-${nextCount}`,
-            timestamp: new Date().toISOString()
-          };
+          console.log('Processing item based on Arduino response 111');
           
+          // Generate QR code for the current item
+          const qrData = { ...productionData };
           const qrImage = generateQrCodeDataUrl(qrData);
           
-          // พิมพ์ QR Code
+          // Print QR code
+          const nextCount = parseInt(currentCount) + 1;
+          
           const printSuccess = await handlePrintQR(qrImage, qrData);
           
-          if (printSuccess) {
-            // อัพเดท state หลังจากพิมพ์สำเร็จ
+          if (printSuccess || isKioskMode) {
+            // Update counts
             setCurrentCount(nextCount.toString());
-            console.log(`Successfully printed item ${nextCount}`);
-  
-            // ถ้ายังไม่ครบจำนวน ส่งคำสั่งผลิตชิ้นต่อไป
+            console.log(`Successfully processed item ${nextCount}`);
+            
+            // If target not reached, send command for next item
             if (nextCount < targetCount) {
               await new Promise(resolve => setTimeout(resolve, 1000));
               console.log('Starting next production cycle');
-              await sendCommand('111');
+              await sendCommand('110'); // Send command for next cycle
             } else {
               console.log('Production complete');
               await handleStop();
             }
           } else {
-            console.log('Print failed');
+            console.log('Print failed or canceled');
+            if (!isKioskMode) {
+              console.log('Production paused due to print cancellation');
+            }
           }
         } catch (error) {
           console.error('Error processing product:', error);
@@ -405,8 +421,8 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
       })();
     }
   }, [
-    logs,
-    isRunning,
+    logs, 
+    isRunning, 
     targetCount,
     currentCount,
     productionData,
@@ -415,7 +431,8 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
     generateQrCodeDataUrl,
     handlePrintQR,
     isPrinting,
-    isProcessing
+    isProcessing,
+    isKioskMode
   ]);
 
   // แก้ไข handleStartProduction
@@ -436,23 +453,33 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
       };
       
       const qrImage = generateQrCodeDataUrl(qrData);
-      const printSuccess = await handlePrintQR(qrImage, qrData);
-  
-      if (printSuccess) {
-        // เริ่มการผลิตหลังจากพิมพ์สำเร็จ
-        console.log('Starting production with target:', activeTarget);
-        await sendCommand('111');
+      
+      // In kiosk mode, always proceed with printing and production
+      if (isKioskMode) {
+        console.log('Starting production in kiosk mode with target:', activeTarget);
+        const printAttempt = await handlePrintQR(qrImage, qrData);
+        console.log('Initial print result in kiosk mode:', printAttempt);
+        // In kiosk mode, always send command regardless of print result
+        await sendCommand('110');
+        return true;
       } else {
-        throw new Error('การพิมพ์ QR Code ไม่สำเร็จ');
+        // In regular mode, only proceed if printing is successful
+        const printSuccess = await handlePrintQR(qrImage, qrData);
+        if (printSuccess) {
+          console.log('Starting production with target:', activeTarget);
+          await sendCommand('110');
+          return true;
+        } else {
+          throw new Error('การพิมพ์ QR Code ไม่สำเร็จ');
+        }
       }
-  
     } catch (error) {
       console.error('Start production error:', error);
       setError('ไม่สามารถเริ่มการผลิตได้: ' + (error instanceof Error ? error.message : 'Unknown error'));
       setIsRunning(false);
       throw error;
     }
-  }, [user, productionData, targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl]);
+  }, [user, productionData, targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl, isKioskMode]);
 
   const handleStart = useCallback(() => {
     if (!productionData) {
@@ -520,13 +547,6 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
       console.log('Target count updated:', targetCount);
     }
   }, [targetCount, isRunning]);
-
-  const handleCountUpdate = useCallback((count: string) => {
-    setCurrentCount(count);
-    if (isRunning) {
-      setStopCount(count);
-    }
-  }, [isRunning]);
 
   const material = productionData?.Material;
   const batch = productionData?.Batch;
@@ -810,7 +830,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="text-sm font-medium text-gray-500">Serial Numbers</div>
                 <div className="mt-2 text-sm text-gray-600 max-h-32 overflow-y-auto">
-                  {completionData.serialNumbers.map((sn, index) => (
+                  {completionData.serialNumbers.map((sn) => (
                     <div key={sn} className="py-1 border-b border-gray-100 last:border-0">
                       {sn}
                     </div>
