@@ -106,6 +106,10 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
     return `data:image/svg+xml;base64,${btoa(qrCodeSVG)}`;
   }, []);
   
+  // เพิ่ม printedCountRef เพื่อติดตามค่า printedCount ล่าสุด
+  const printedCountRef = useRef(0);
+
+  // แก้ไขในส่วนของ handlePrintQR เพื่ออัพเดต ref ด้วย
   const handlePrintQR = useCallback(async (qrImage: string, qrData: SheetData, isBlank: boolean = false) => {
     if (isPrinting) return false;
   
@@ -204,17 +208,20 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
             // ป้องกันการนับเกินเป้าหมาย
             const newPrintedCount = Math.min(printedCount + 1, targetCount);
             
+            // อัพเดต printedCountRef เพิ่มเติม
+            printedCountRef.current = newPrintedCount;
+            
             // อัพเดตทั้ง printedCount และ currentCount พร้อมกัน
             setPrintedCount(newPrintedCount); 
-            setCurrentCount(newPrintedCount.toString()); // เพิ่มบรรทัดนี้เพื่อให้ค่าตรงกัน
+            setCurrentCount(newPrintedCount.toString());
             setStopCount(newPrintedCount.toString());
             setRemainingPrints(prev => prev - 1);
             
-            console.log(`พิมพ์เสร็จสิ้น: ${newPrintedCount}/${targetCount}`);
+            console.log(`พิมพ์เสร็จสิ้น: ${newPrintedCount}/${targetCount} (ref: ${printedCountRef.current})`);
             resolve(true); // Always resolve true in kiosk mode
           });
           
-          // Fallback timeout
+          // Fallback timeout ควรอัพเดต ref ด้วย
           setTimeout(() => {
             if (document.body.contains(iframe)) {
               cleanup();
@@ -282,7 +289,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
 
   const isSaving = useRef(false);
 
-  // แก้ไขฟังก์ชัน handleStop เพื่อรอการอัพเดตค่า printedCount
+  // แก้ไขฟังก์ชัน handleStop เพื่อใช้ printedCountRef
 
 const handleStop = useCallback(async (forceStop: boolean = false) => {
   if (!user || !startTime) return;
@@ -291,8 +298,8 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
   if (!isRunning || isSaving.current) return;
   
   // ใช้ printedCount แทน currentCount ในการตรวจสอบว่าถึงเป้าหมายหรือยัง
-  if (!forceStop && printedCount < targetCount) {
-    console.log('Production not complete yet - printedCount:', printedCount, 'targetCount:', targetCount);
+  if (!forceStop && printedCountRef.current < targetCount) {
+    console.log('Production not complete yet - printedCount:', printedCountRef.current, 'targetCount:', targetCount);
     return;
   }
 
@@ -303,22 +310,22 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
     // Set isRunning to false immediately to prevent duplicate calls
     setIsRunning(false);
     
-    // ถ้าเป็น forceStop ให้รอเพิ่มเติมเพื่อให้แน่ใจว่า state อัพเดตแล้ว
-    if (forceStop) {
-      console.log('Force stopping - waiting for state to update');
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
+    // เพิ่มการรอให้นานขึ้นเพื่อให้ state อัพเดตเรียบร้อย
+    console.log('Force stopping - waiting for all state updates');
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // ใช้ printedCount แทน currentCount เพื่อคำนวณค่าที่ถูกต้อง
-    const actualProduced = printedCount;
+    // ใช้ค่าจาก ref เพื่อให้แน่ใจว่าเป็นค่าล่าสุด
+    const actualProduced = Math.max(printedCountRef.current, printedCount);
     
-    console.log(`Production complete: ${actualProduced} units produced`);
+    console.log(`Production complete: ${actualProduced} units produced (ref: ${printedCountRef.current}, state: ${printedCount})`);
 
     // สร้าง serial numbers ตามจำนวนที่ผลิตจริง
     const serialNumbers = Array.from(
       { length: actualProduced },
       (_, i) => `${productionData?.Batch}-${i + 1}`
     );
+
+    // โค้ดส่วนที่เหลือเดิม...
 
     const qrData = {
       ...productionData,
@@ -368,6 +375,7 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
     
     // Clear states only after successful save
     setPrintedCount(0);
+    printedCountRef.current = 0; // รีเซ็ต ref ด้วย
     setCurrentCount('0');
     setStopCount('0');
     setTargetCount(0);
@@ -444,11 +452,12 @@ useEffect(() => {
         console.log('Received response 1 from Arduino, ready for next cycle');
         
         // ตรวจสอบแบบเข้มงวดว่ายังไม่ถึงเป้าหมาย
-        if (printedCount < targetCount - 1) {
+        // ใช้ค่าจาก ref ด้วย
+        if (printedCountRef.current < targetCount - 1) {
           // Generate QR code for the next item
           const qrData = { 
             ...productionData,
-            serialNumber: `${productionData?.Batch}-${printedCount + 1}`,
+            serialNumber: `${productionData?.Batch}-${printedCountRef.current + 1}`,
             timestamp: new Date().toISOString()
           };
           const qrImage = generateQrCodeDataUrl(qrData);
@@ -467,7 +476,7 @@ useEffect(() => {
           console.log('Production complete or at final item - reached target count');
           
           // เพิ่ม delay เพื่อให้แน่ใจว่า state ได้อัพเดตแล้วก่อนบันทึก
-          await new Promise(resolve => setTimeout(resolve, 800));
+          await new Promise(resolve => setTimeout(resolve, 1500));
           
           // บันทึกผลการผลิต
           await handleStop(true);
