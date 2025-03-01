@@ -282,7 +282,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
 
   const isSaving = useRef(false);
 
-  // แก้ไขฟังก์ชัน handleStop เพื่อใช้ printedCount แทน currentCount ในการตรวจสอบการเสร็จสิ้น
+  // แก้ไขฟังก์ชัน handleStop เพื่อรอการอัพเดตค่า printedCount
 
 const handleStop = useCallback(async (forceStop: boolean = false) => {
   if (!user || !startTime) return;
@@ -303,12 +303,18 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
     // Set isRunning to false immediately to prevent duplicate calls
     setIsRunning(false);
     
+    // ถ้าเป็น forceStop ให้รอเพิ่มเติมเพื่อให้แน่ใจว่า state อัพเดตแล้ว
+    if (forceStop) {
+      console.log('Force stopping - waiting for state to update');
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
     // ใช้ printedCount แทน currentCount เพื่อคำนวณค่าที่ถูกต้อง
     const actualProduced = printedCount;
-
+    
     console.log(`Production complete: ${actualProduced} units produced`);
 
-    // Create unique serial numbers
+    // สร้าง serial numbers ตามจำนวนที่ผลิตจริง
     const serialNumbers = Array.from(
       { length: actualProduced },
       (_, i) => `${productionData?.Batch}-${i + 1}`
@@ -421,7 +427,7 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
     verifySession();
   }, [router]);
 
-  // แก้ไข Arduino monitoring effect
+  // แก้ไข Arduino monitoring effect เพื่อให้รอการนับชิ้นสุดท้าย
 
 useEffect(() => {
   if (!isRunning) return;
@@ -438,7 +444,6 @@ useEffect(() => {
         console.log('Received response 1 from Arduino, ready for next cycle');
         
         // ตรวจสอบแบบเข้มงวดว่ายังไม่ถึงเป้าหมาย
-        // อัพเดตเงื่อนไข - ต้องน้อยกว่าเป้าหมายอย่างน้อย 1
         if (printedCount < targetCount - 1) {
           // Generate QR code for the next item
           const qrData = { 
@@ -448,9 +453,9 @@ useEffect(() => {
           };
           const qrImage = generateQrCodeDataUrl(qrData);
           
-          // ส่งคำสั่งให้ Arduino ทำงานรอบต่อไป (ถ้ายังไม่ครบตามเป้าหมาย)
+          // ส่งคำสั่งให้ Arduino ทำงานรอบต่อไป
           console.log('Starting next production cycle');
-          await sendCommand('110'); // Send command for next cycle
+          await sendCommand('110');
           
           // พิมพ์ QR code ทันทีหลังส่งคำสั่ง 110
           await handlePrintQR(qrImage, qrData);
@@ -458,8 +463,13 @@ useEffect(() => {
           // ตั้งค่าให้รอการตอบกลับจาก Arduino ในรอบถัดไป
           setWaitingForArduinoResponse(true);
         } else {
-          // ถึงชิ้นสุดท้ายแล้ว (หรือเกินไปแล้ว)
+          // ถึงชิ้นสุดท้ายแล้ว
           console.log('Production complete or at final item - reached target count');
+          
+          // เพิ่ม delay เพื่อให้แน่ใจว่า state ได้อัพเดตแล้วก่อนบันทึก
+          await new Promise(resolve => setTimeout(resolve, 800));
+          
+          // บันทึกผลการผลิต
           await handleStop(true);
         }
       } catch (error) {
@@ -480,9 +490,6 @@ useEffect(() => {
   sendCommand,
   generateQrCodeDataUrl,
   handlePrintQR,
-  isPrinting,
-  isProcessing,
-  isKioskMode,
   waitingForArduinoResponse,
   printedCount
 ]);
