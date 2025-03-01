@@ -9,15 +9,17 @@ interface SerialPort {
   close: () => Promise<void>;
 }
 
-type CustomSerialPort = SerialPort & {
-  readable: ReadableStream<Uint8Array>;
-};
-
 // Define types
+interface LogEntry {
+  timestamp: string;
+  message: string;
+  type: 'sent' | 'received' | 'system';
+}
+
 interface ArduinoContextType {
   status: string;
   connected: boolean;
-  logs: string[];
+  logs: LogEntry[]; // เปลี่ยนจาก string[] เป็น LogEntry[]
   requestPort: () => Promise<void>;
   disconnect: () => Promise<void>;
   sendCommand: (command: string) => Promise<void>;
@@ -40,13 +42,13 @@ export function ArduinoProvider({ children }: { children: React.ReactNode }) {
   const [port, setPort] = useState<SerialPort | null>(null);
   const [status, setStatus] = useState('Awaiting port selection');
   const [connected, setConnected] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
 
   // Utility function for logging
-  const addLog = useCallback((message: string) => {
+  const addLog = useCallback((message: string, type: 'sent' | 'received' | 'system' = 'system') => {
     const timestamp = new Date().toLocaleTimeString();
-    setLogs(prev => [...prev, `${timestamp}: ${message}`]);
+    setLogs(prev => [...prev, { timestamp, message, type }]);
   }, []);
 
   // Handle serial port reading
@@ -63,7 +65,7 @@ export function ArduinoProvider({ children }: { children: React.ReactNode }) {
 
         const text = new TextDecoder().decode(value);
         if (text.trim()) {
-          addLog(`Received: ${text.trim()}`);
+          addLog(`${text.trim()}`, 'received');
         }
       }
     } catch (err) {
@@ -90,7 +92,7 @@ export function ArduinoProvider({ children }: { children: React.ReactNode }) {
       }
       setConnected(true);
       setStatus('Connected');
-      addLog('Connected to Arduino');
+      addLog('Connected to Arduino', 'system');
       
       startReading(selectedPort);
     } catch (err) {
@@ -99,7 +101,7 @@ export function ArduinoProvider({ children }: { children: React.ReactNode }) {
           setStatus('Awaiting port selection');
         } else {
           setStatus('Connection failed');
-          addLog(`Connection error: ${err.message}`);
+          addLog(`Connection error: ${err.message}`, 'system');
         }
       }
       throw err;
@@ -129,13 +131,13 @@ export function ArduinoProvider({ children }: { children: React.ReactNode }) {
     setPort(null);
     setConnected(false);
     setStatus('Awaiting port selection');
-    addLog('Disconnected from Arduino');
+    addLog('Disconnected from Arduino', 'system');
   }, [port, addLog]);
 
   // Send command to Arduino
   const sendCommand = useCallback(async (command: string) => {
     if (!port || !connected) {
-      addLog('Error: Not connected to Arduino');
+      addLog('Error: Not connected to Arduino', 'system');
       return;
     }
 
@@ -145,12 +147,12 @@ export function ArduinoProvider({ children }: { children: React.ReactNode }) {
       try {
         const data = new TextEncoder().encode(command + '\n');
         await writer.write(data);
-        addLog(`Sent: ${command}`);
+        addLog(`${command}`, 'sent');
       } finally {
         writer.releaseLock();
       }
     } catch (err) {
-      addLog(`Send error: ${err}`);
+      addLog(`Send error: ${err}`, 'system');
       console.error('Send error:', err);
     }
   }, [port, connected, addLog]);

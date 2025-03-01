@@ -200,12 +200,15 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
           iframe.contentWindow?.print();
           iframe.contentWindow?.addEventListener('afterprint', () => {
             cleanup();
-            const newPrintedCount = printedCount + 1;
-            setPrintedCount(newPrintedCount);
-            setRemainingPrints(prev => prev - 1);
             
-            // อัพเดต stopCount ทุกครั้งที่พิมพ์สำเร็จ
+            // ป้องกันการนับเกินเป้าหมาย
+            const newPrintedCount = Math.min(printedCount + 1, targetCount);
+            
+            // อัพเดตทั้ง printedCount และ currentCount พร้อมกัน
+            setPrintedCount(newPrintedCount); 
+            setCurrentCount(newPrintedCount.toString()); // เพิ่มบรรทัดนี้เพื่อให้ค่าตรงกัน
             setStopCount(newPrintedCount.toString());
+            setRemainingPrints(prev => prev - 1);
             
             console.log(`พิมพ์เสร็จสิ้น: ${newPrintedCount}/${targetCount}`);
             resolve(true); // Always resolve true in kiosk mode
@@ -215,17 +218,20 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
           setTimeout(() => {
             if (document.body.contains(iframe)) {
               cleanup();
-              const newPrintedCount = printedCount + 1;
-              setPrintedCount(newPrintedCount);
-              setRemainingPrints(prev => prev - 1);
               
-              // อัพเดต stopCount ทุกครั้งที่พิมพ์สำเร็จ
+              // ป้องกันการนับเกินเป้าหมาย
+              const newPrintedCount = Math.min(printedCount + 1, targetCount);
+              
+              // อัพเดตทั้ง printedCount และ currentCount พร้อมกัน
+              setPrintedCount(newPrintedCount);
+              setCurrentCount(newPrintedCount.toString()); // เพิ่มบรรทัดนี้เพื่อให้ค่าตรงกัน
               setStopCount(newPrintedCount.toString());
+              setRemainingPrints(prev => prev - 1);
               
               console.log(`Print timeout - assuming completed: ${newPrintedCount}/${targetCount}`);
               resolve(true);
             }
-          }, 5000);
+          }, 1000);
         } else {
           const shouldPrint = window.confirm('พิมพ์ QR Code?');
           if (shouldPrint) {
@@ -257,7 +263,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
                 console.log(`Print timeout - assuming completed: ${newPrintedCount}/${targetCount}`);
                 resolve(true);
               }
-            }, 5000);
+            }, 1000);
           } else {
             cleanup();
             resolve(false);
@@ -276,109 +282,110 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
 
   const isSaving = useRef(false);
 
-  // Modify handleStop to show completion modal
-  const handleStop = useCallback(async (forceStop: boolean = false) => {
-    if (!user || !startTime) return;
+  // แก้ไขฟังก์ชัน handleStop เพื่อใช้ printedCount แทน currentCount ในการตรวจสอบการเสร็จสิ้น
+
+const handleStop = useCallback(async (forceStop: boolean = false) => {
+  if (!user || !startTime) return;
+  
+  // Prevent multiple stop calls
+  if (!isRunning || isSaving.current) return;
+  
+  // ใช้ printedCount แทน currentCount ในการตรวจสอบว่าถึงเป้าหมายหรือยัง
+  if (!forceStop && printedCount < targetCount) {
+    console.log('Production not complete yet - printedCount:', printedCount, 'targetCount:', targetCount);
+    return;
+  }
+
+  try {
+    // Set flag to prevent duplicate saves
+    isSaving.current = true;
     
-    // Prevent multiple stop calls
-    if (!isRunning || isSaving.current) return;
+    // Set isRunning to false immediately to prevent duplicate calls
+    setIsRunning(false);
     
-    // Only stop if we've reached target count or force stop
-    if (!forceStop && parseInt(currentCount) < targetCount) {
-      console.log('Production not complete yet');
-      return;
-    }
-  
-    try {
-      // Set flag to prevent duplicate saves
-      isSaving.current = true;
-      
-      // Set isRunning to false immediately to prevent duplicate calls
-      setIsRunning(false);
-      
-      const finalCount = parseInt(currentCount);
-      const initialCount = parseInt(startCount);
-      const actualProduced = finalCount - initialCount;
-  
-      console.log(`Production complete: ${actualProduced} units produced`);
-  
-      // Create unique serial numbers
-      const serialNumbers = Array.from(
-        { length: actualProduced },
-        (_, i) => `${productionData?.Batch}-${i + 1}`
-      );
-  
-      const qrData = {
-        ...productionData,
-        serialNumbers,
-        timestamp: new Date().toISOString(),
-        finalCount,
-        initialCount,
-        actualProduced
-      };
-  
-      // Generate final QR code
-      const qrCodeImage = generateQrCodeDataUrl({
-        ...qrData,
-        type: 'SUMMARY'
-      });
-  
-      const logData: ProductionLogData = {
-        userId: user.id,
-        username: user.username,
-        date: new Date().toISOString().split('T')[0],
-        startTime: startTime.toISOString(),
-        endTime: new Date().toISOString(),
-        startCount: initialCount,
-        endCount: finalCount,
-        totalProduced: actualProduced,
-        material: productionData?.Material ?? '',
-        batch: productionData?.Batch ?? '',
-        vendorBatch: productionData?.["Vendor Batch"] ?? '',
-        materialDescription: productionData?.["Material Description"] ?? '',
-        qrCodeData: JSON.stringify(qrData),
-        qrCodeImage: qrCodeImage,
-        serialNumbers
-      };
-  
-      // Save production log
-      const savedLog = await saveProductionLog(logData);
-      console.log('Production log saved successfully:', savedLog);
-      
-      // Show completion modal after successful save
-      setCompletionData({
-        totalProduced: actualProduced,
-        startTime,
-        endTime: new Date(),
-        serialNumbers
-      });
-      setShowCompletionModal(true);
-      
-      // Clear states only after successful save
-      setPrintedCount(0);
-      setCurrentCount('0');
-      setStopCount('0');
-      setTargetCount(0);
-      setStartTime(null);
-      
-    } catch (error) {
-      console.error('Error saving production log:', error);
-      setError(error instanceof Error ? error.message : 'Failed to save production log');
-      setIsRunning(true); // Restore running state if save fails
-    } finally {
-      // Reset save flag
-      isSaving.current = false;
-    }
-  }, [
-    user,
-    startTime,
-    currentCount,
-    targetCount,
-    startCount,
-    productionData,
-    generateQrCodeDataUrl,
-    isRunning
-  ]);
+    // ใช้ printedCount แทน currentCount เพื่อคำนวณค่าที่ถูกต้อง
+    const actualProduced = printedCount;
+
+    console.log(`Production complete: ${actualProduced} units produced`);
+
+    // Create unique serial numbers
+    const serialNumbers = Array.from(
+      { length: actualProduced },
+      (_, i) => `${productionData?.Batch}-${i + 1}`
+    );
+
+    const qrData = {
+      ...productionData,
+      serialNumbers,
+      timestamp: new Date().toISOString(),
+      finalCount: actualProduced,
+      initialCount: parseInt(startCount),
+      actualProduced
+    };
+
+    // Generate final QR code
+    const qrCodeImage = generateQrCodeDataUrl({
+      ...qrData,
+      type: 'SUMMARY'
+    });
+
+    const logData: ProductionLogData = {
+      userId: user.id,
+      username: user.username,
+      date: new Date().toISOString().split('T')[0],
+      startTime: startTime.toISOString(),
+      endTime: new Date().toISOString(),
+      startCount: parseInt(startCount),
+      endCount: actualProduced,
+      totalProduced: actualProduced,
+      material: productionData?.Material ?? '',
+      batch: productionData?.Batch ?? '',
+      vendorBatch: productionData?.["Vendor Batch"] ?? '',
+      materialDescription: productionData?.["Material Description"] ?? '',
+      qrCodeData: JSON.stringify(qrData),
+      qrCodeImage: qrCodeImage,
+      serialNumbers
+    };
+
+    // Save production log
+    const savedLog = await saveProductionLog(logData);
+    console.log('Production log saved successfully:', savedLog);
+    
+    // Show completion modal after successful save
+    setCompletionData({
+      totalProduced: actualProduced,
+      startTime,
+      endTime: new Date(),
+      serialNumbers
+    });
+    setShowCompletionModal(true);
+    
+    // Clear states only after successful save
+    setPrintedCount(0);
+    setCurrentCount('0');
+    setStopCount('0');
+    setTargetCount(0);
+    setStartTime(null);
+    
+  } catch (error) {
+    console.error('Error saving production log:', error);
+    setError(error instanceof Error ? error.message : 'Failed to save production log');
+    setIsRunning(true); // Restore running state if save fails
+  } finally {
+    // Reset save flag
+    isSaving.current = false;
+  }
+}, [
+  user,
+  startTime,
+  currentCount,
+  targetCount,
+  startCount,
+  productionData,
+  generateQrCodeDataUrl,
+  isRunning,
+  printedCount
+]);
 
   useEffect(() => {
     const verifySession = async () => {
@@ -415,139 +422,128 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
   }, [router]);
 
   // แก้ไข Arduino monitoring effect
-  useEffect(() => {
-    if (!isRunning) return;
-    
-    // Get the most recent log entry
-    const lastMessage = logs[logs.length - 1];
-    
-    // เมื่อได้รับข้อมูล '1' กลับมาจาก Arduino และกำลังรออยู่
-    if (lastMessage?.includes('1') && waitingForArduinoResponse) {
-      (async () => {
-        try {
-          setIsProcessing(true);
-          setWaitingForArduinoResponse(false); // รีเซ็ตสถานะการรอ
-          console.log('Processing item based on Arduino response 1');
-          
-          // Generate QR code for the current item
-          const qrData = { ...productionData };
+
+useEffect(() => {
+  if (!isRunning) return;
+  
+  // Get the most recent log entry
+  const lastLog = logs[logs.length - 1];
+  
+  // เมื่อได้รับข้อมูล '1' กลับมาจาก Arduino และกำลังรออยู่
+  if (lastLog?.type === 'received' && lastLog.message === '1' && waitingForArduinoResponse) {
+    (async () => {
+      try {
+        setIsProcessing(true);
+        setWaitingForArduinoResponse(false); // รีเซ็ตสถานะการรอ
+        console.log('Received response 1 from Arduino, ready for next cycle');
+        
+        // ตรวจสอบว่าได้พิมพ์ครบตามเป้าหมายหรือยัง
+        if (printedCount < targetCount) {
+          // Generate QR code for the next item
+          const qrData = { 
+            ...productionData,
+            serialNumber: `${productionData?.Batch}-${printedCount + 1}`,
+            timestamp: new Date().toISOString()
+          };
           const qrImage = generateQrCodeDataUrl(qrData);
           
-          // Print QR code
-          const nextCount = parseInt(currentCount) + 1;
+          // ส่งคำสั่งให้ Arduino ทำงานรอบต่อไป (ถ้ายังไม่ครบตามเป้าหมาย)
+          console.log('Starting next production cycle');
+          await sendCommand('110'); // Send command for next cycle
           
-          const printSuccess = await handlePrintQR(qrImage, qrData);
+          // พิมพ์ QR code ทันทีหลังส่งคำสั่ง 110
+          await handlePrintQR(qrImage, qrData);
           
-          if (printSuccess || isKioskMode) {
-            // Update counts
-            setCurrentCount(nextCount.toString());
-            console.log(`Successfully processed item ${nextCount}`);
-            
-            // If target not reached, send command for next item
-            if (nextCount < targetCount) {
-              // ลดดีเลย์เหลือเพียง 1 มิลลิวินาที
-              await new Promise(resolve => setTimeout(resolve, 1));
-              console.log('Starting next production cycle');
-              await sendCommand('110'); // Send command for next cycle
-              setWaitingForArduinoResponse(true); // ตั้งค่าสถานะรอการตอบกลับ
-            } else {
-              console.log('Production complete');
-              await handleStop();
-            }
-          } else {
-            console.log('Print failed or canceled');
-            if (!isKioskMode) {
-              console.log('Production paused due to print cancellation');
-            }
-          }
-  
-          // Check if we need to print more
-          if (remainingPrints <= 0 && nextCount < totalPrints) {
-            setRemainingPrints(Math.min(15, totalPrints - nextCount));
-            // Print blank labels if needed
-            for (let i = 0; i < Math.min(15, totalPrints - nextCount); i++) {
-              await handlePrintQR('', {}, true);
-            }
-          }
-        } catch (error) {
-          console.error('Error processing product:', error);
-          setError('เกิดข้อผิดพลาดในการผลิต');
-          setWaitingForArduinoResponse(false); // รีเซ็ตสถานะการรอในกรณีเกิดข้อผิดพลาด
-        } finally {
-          setIsProcessing(false);
+          // ตั้งค่าให้รอการตอบกลับจาก Arduino ในรอบถัดไป
+          setWaitingForArduinoResponse(true);
+        } else {
+          // ถ้าพิมพ์ครบตามเป้าหมายแล้ว ให้หยุดการทำงาน
+          console.log('Production complete - reached target count');
+          await handleStop(true);
         }
-      })();
-    }
-  }, [
-    logs, 
-    isRunning, 
-    targetCount,
-    currentCount,
-    productionData,
-    handleStop,
-    sendCommand,
-    generateQrCodeDataUrl,
-    handlePrintQR,
-    isPrinting,
-    isProcessing,
-    isKioskMode,
-    remainingPrints,
-    totalPrints,
-    waitingForArduinoResponse // เพิ่ม dependency นี้เพื่อให้ effect ทำงานเมื่อสถานะเปลี่ยน
-  ]);
-
-  // แก้ไข handleStartProduction
-  const handleStartProduction = useCallback(async (inputTarget?: number) => {
-    try {
-      const activeTarget = inputTarget || targetCount;
-  
-      // Validation checks
-      if (!user?.id || !productionData?.Batch || !productionData?.Material) {
-        throw new Error('ข้อมูลไม่ครบถ้วน');
+      } catch (error) {
+        console.error('Error processing product:', error);
+        setError('เกิดข้อผิดพลาดในการผลิต');
+        setWaitingForArduinoResponse(false);
+      } finally {
+        setIsProcessing(false);
       }
-  
-      // Set total prints and remaining prints
-      setTotalPrints(activeTarget);
-      setRemainingPrints(Math.min(15, activeTarget));
-  
-      // สร้างและพิมพ์ QR Code แรก
-      const qrData = {
-        ...productionData,
-        serialNumber: `${productionData.Batch}-1`,
-        timestamp: new Date().toISOString()
-      };
+    })();
+  }
+}, [
+  logs, 
+  isRunning, 
+  targetCount,
+  productionData,
+  handleStop,
+  sendCommand,
+  generateQrCodeDataUrl,
+  handlePrintQR,
+  isPrinting,
+  isProcessing,
+  isKioskMode,
+  waitingForArduinoResponse,
+  printedCount
+]);
+
+  // แก้ไข handleStartProduction เพื่อให้พิมพ์ QR code ทันทีเมื่อส่งคำสั่ง 110
+
+const handleStartProduction = useCallback(async (inputTarget?: number) => {
+  try {
+    const activeTarget = inputTarget || targetCount;
+
+    // Validation checks
+    if (!user?.id || !productionData?.Batch || !productionData?.Material) {
+      throw new Error('ข้อมูลไม่ครบถ้วน');
+    }
+
+    // Set total prints and remaining prints
+    setTotalPrints(activeTarget);
+    setRemainingPrints(Math.min(15, activeTarget));
+
+    // สร้างและพิมพ์ QR Code แรก
+    const qrData = {
+      ...productionData,
+      serialNumber: `${productionData.Batch}-1`,
+      timestamp: new Date().toISOString()
+    };
+    
+    const qrImage = generateQrCodeDataUrl(qrData);
+    
+    // ในโหมด kiosk, สั่งการพิมพ์ทันที
+    if (isKioskMode) {
+      console.log('Starting production in kiosk mode with target:', activeTarget);
       
-      const qrImage = generateQrCodeDataUrl(qrData);
+      // ส่งคำสั่งไปยัง Arduino ก่อน
+      await sendCommand('110');
       
-      // In kiosk mode, always proceed with printing and production
-      if (isKioskMode) {
-        console.log('Starting production in kiosk mode with target:', activeTarget);
-        const printAttempt = await handlePrintQR(qrImage, qrData);
-        console.log('Initial print result in kiosk mode:', printAttempt);
-        // In kiosk mode, always send command regardless of print result
+      // จากนั้นพิมพ์ QR code ทันที โดยไม่ต้องรอการตอบกลับจาก Arduino
+      const printAttempt = await handlePrintQR(qrImage, qrData);
+      console.log('Initial print result in kiosk mode:', printAttempt);
+      
+      // ตั้งสถานะว่ากำลังรอการตอบกลับเพื่อเริ่มรอบต่อไป
+      setWaitingForArduinoResponse(true);
+      return true;
+    } else {
+      // ในโหมดปกติ ให้มีการยืนยันก่อนพิมพ์
+      const printSuccess = await handlePrintQR(qrImage, qrData);
+      if (printSuccess) {
+        console.log('Starting production with target:', activeTarget);
         await sendCommand('110');
-        setWaitingForArduinoResponse(true); // ตั้งค่าสถานะว่ากำลังรอการตอบกลับ
+        setWaitingForArduinoResponse(true);
         return true;
       } else {
-        // In regular mode, only proceed if printing is successful
-        const printSuccess = await handlePrintQR(qrImage, qrData);
-        if (printSuccess) {
-          console.log('Starting production with target:', activeTarget);
-          await sendCommand('110');
-          setWaitingForArduinoResponse(true); // ตั้งค่าสถานะว่ากำลังรอการตอบกลับ
-          return true;
-        } else {
-          throw new Error('การพิมพ์ QR Code ไม่สำเร็จ');
-        }
+        throw new Error('การพิมพ์ QR Code ไม่สำเร็จ');
       }
-    } catch (error) {
-      console.error('Start production error:', error);
-      setError('ไม่สามารถเริ่มการผลิตได้: ' + (error instanceof Error ? error.message : 'Unknown error'));
-      setIsRunning(false);
-      setWaitingForArduinoResponse(false); // รีเซ็ตสถานะในกรณีเกิดข้อผิดพลาด
-      throw error;
     }
-  }, [user, productionData, targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl, isKioskMode]);
+  } catch (error) {
+    console.error('Start production error:', error);
+    setError('ไม่สามารถเริ่มการผลิตได้: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    setIsRunning(false);
+    setWaitingForArduinoResponse(false);
+    throw error;
+  }
+}, [user, productionData, targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl, isKioskMode]);
 
   const handleStart = useCallback(() => {
     if (!productionData) {
@@ -872,6 +868,37 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Arduino Logs */}
+      {isRunning && (
+        <div className="bg-white shadow-lg rounded-lg overflow-hidden mt-4">
+          <div className="bg-gradient-to-r from-gray-600 to-gray-700 px-6 py-4">
+            <h3 className="text-lg font-semibold text-white">บันทึกการทำงาน</h3>
+          </div>
+          <div className="p-4 max-h-60 overflow-y-auto bg-gray-100 font-mono text-sm">
+            <div className="space-y-1">
+              {logs.map((log, index) => (
+                <div 
+                  key={index}
+                  className={`px-2 py-1 rounded ${
+                    log.type === 'sent' ? 'bg-blue-100' : 
+                    log.type === 'received' ? 'bg-green-100' : 'bg-gray-50'
+                  }`}
+                >
+                  <span className="text-gray-500">{log.timestamp}</span>
+                  <span className={`ml-2 ${
+                    log.type === 'sent' ? 'text-blue-700' : 
+                    log.type === 'received' ? 'text-green-700' : 'text-gray-700'
+                  }`}>
+                    {log.type === 'sent' ? '↑ ' : log.type === 'received' ? '↓ ' : ''}
+                    {log.message}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
