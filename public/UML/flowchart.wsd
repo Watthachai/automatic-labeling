@@ -1,0 +1,85 @@
+@startuml แผนภาพขั้นตอนระบบติดฉลากอัตโนมัติ
+!define AWSPUML https://raw.githubusercontent.com/awslabs/aws-icons-for-plantuml/v11.1/dist
+!include AWSPUML/AWSCommon.puml
+!include AWSPUML/General/User.puml
+!include AWSPUML/InternetOfThings/IoTSensor.puml
+!include AWSPUML/Storage/SimpleStorageService.puml
+
+skinparam actorStyle awesome
+skinparam backgroundColor white
+skinparam handwritten false
+skinparam defaultFontName "Prompt"
+
+title ขั้นตอนการทำงานระบบติดฉลากอัตโนมัติสำหรับโรงพยาบาล
+
+actor "ผู้ปฏิบัติงาน" as user
+participant "ระบบเข้าสู่ระบบ" as login
+participant "หน้าควบคุมการผลิต" as ui
+participant "ตัวควบคุม Arduino" as arduino
+database "ฐานข้อมูลการผลิต" as db
+participant "บริการพิมพ์" as printer
+
+'ขั้นตอนหลัก
+user -> login: กรอกข้อมูลเข้าระบบ
+note right: ชื่อผู้ใช้และรหัสผ่าน
+alt การยืนยันตัวตนสองชั้น
+    login --> user: ขอรหัส SMS ยืนยัน
+    user --> login: กรอกรหัส SMS
+end
+
+login -> user: เข้าสู่ระบบสำเร็จ
+
+user -> ui: เลือกข้อมูลการผลิตจาก Excel
+ui -> db: โหลดข้อมูลการผลิต
+
+user -> arduino: เชื่อมต่อกับอุปกรณ์
+alt เชื่อมต่อสำเร็จ
+    arduino -> ui: เชื่อมต่อสำเร็จ
+else เชื่อมต่อล้มเหลว
+    arduino -> ui: ข้อผิดพลาดการเชื่อมต่อ
+    ui -> user: แสดงข้อความแจ้งเตือน
+end
+
+user -> ui: กำหนดจำนวนเป้าหมายการผลิต
+user -> ui: เริ่มการผลิต
+
+group วงรอบการผลิต
+    ui -> arduino: ส่งคำสั่ง (110)
+    arduino -> arduino: เริ่มกระบวนการผลิต
+    arduino -> ui: ส่งสถานะ (111)
+    
+    ui -> printer: สร้าง QR code
+    printer -> ui: ส่งภาพ QR กลับ
+    
+    alt โหมดคีออสก์
+        ui -> printer: พิมพ์อัตโนมัติ
+    else โหมดควบคุมด้วยมือ
+        ui -> user: ยืนยันการพิมพ์
+        user -> printer: ยืนยันการพิมพ์
+    end
+    
+    ui -> db: อัปเดตจำนวนการผลิต
+    
+    alt จำนวนปัจจุบัน < จำนวนเป้าหมาย
+        ui -> arduino: ดำเนินการผลิตต่อ
+    else ถึงเป้าหมายแล้ว
+        ui -> arduino: หยุดการผลิต
+        ui -> user: แสดงหน้าต่างเสร็จสิ้น
+    end
+end
+
+alt หยุดด้วยมือ
+    user -> ui: กดปุ่มหยุด
+    ui -> arduino: ส่งคำสั่งหยุด
+    ui -> user: แสดงสรุปการผลิต
+end
+
+alt โหมดแก้ไขข้อผิดพลาด (Debug)
+    user -> ui: เข้าสู่โหมดแก้ไขข้อผิดพลาด
+    ui -> arduino: ส่งคำสั่ง (1)
+    user -> arduino: ส่งคำสั่งด้วยตนเอง
+    note right: คำสั่งเช่น 11, 12, 21 เป็นต้น
+    user -> ui: ออกจากโหมดแก้ไขข้อผิดพลาด
+end
+
+@enduml

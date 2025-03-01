@@ -1,0 +1,110 @@
+@startuml "Hospital Production System Database"
+!theme plain
+skinparam linetype ortho
+skinparam nodesep 70
+skinparam ranksep 50
+skinparam DefaultFontName "Prompt"
+
+' Define tables
+entity "User" as User {
+  * id : String <<PK>>
+  --
+  * username : String <<Unique>>
+  * password : String
+  * role : Enum(Role)
+  * hospitalId : String <<FK>>
+  * department : String
+  o phoneNumber : String (optional)
+  * createdAt : DateTime
+  o lastLogin : DateTime (optional)
+  * isActive : Boolean
+  * is2FAEnabled : Boolean
+  * updatedAt : DateTime
+}
+
+entity "Hospital" as Hospital {
+  * id : String <<PK>>
+  --
+  * name : String <<Unique>>
+}
+
+entity "ActiveProduction" as ActiveProduction {
+  * id : String <<PK>>
+  --
+  * userId : String <<FK>>
+  * material : String
+  * batch : String
+  * vendorBatch : String
+  * startTime : DateTime
+  o endTime : DateTime (optional)
+  * startCount : Int
+  o endCount : Int (optional)
+  * status : Enum(Status)
+  o verifiedBy : String (optional)
+  o verifiedAt : DateTime (optional)
+}
+
+entity "ProductionLog" as ProductionLog {
+  * id : String <<PK>>
+  --
+  * userId : String <<FK>>
+  * username : String
+  * date : String
+  * startTime : DateTime
+  * endTime : DateTime
+  * startCount : Int
+  * endCount : Int
+  * totalProduced : Int
+  o material : String (optional)
+  o batch : String (optional)
+  o vendorBatch : String (optional)
+  o materialDescription : String (optional)
+  o qrCodeData : Text (optional)
+  o qrCodeImage : Text (optional)
+  * serialNumbers : String[]
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "AuditLog" as AuditLog {
+  * id : String <<PK>>
+  --
+  * userId : String <<FK>>
+  * action : String
+  * details : String
+  o productionId : String <<FK>> (optional)
+  * ipAddress : String
+  * createdAt : DateTime
+}
+
+entity "Production" as Production {
+  * id : String <<PK>>
+  --
+  * materialId : String <<FK>>
+  * batch : String
+  * targetCount : Int
+  * actualCount : Int
+  * status : Enum(Status)
+  * userId : String <<FK>>
+  * startedAt : DateTime
+  o finishedAt : DateTime (optional)
+}
+
+entity "Material" as Material {
+  * id : String <<PK>>
+  --
+  * code : String <<Unique>>
+  * description : String
+  * unit : String
+}
+
+' Define relationships
+User ||--o{ ActiveProduction : "has"
+User ||--o{ ProductionLog : "logs"
+User ||--o{ AuditLog : "generates" 
+User ||--o{ Production : "manages"
+Hospital ||--o{ User : "employs"
+Material ||--o{ Production : "used in"
+ActiveProduction |o--o{ AuditLog : "tracks"
+
+@enduml

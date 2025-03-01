@@ -84,10 +84,14 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
   } | null>(null);
 
   // Add new state for kiosk mode
-  const [isKioskMode, setIsKioskMode] = useState(false); // Add this near other state declarations
+  // const [isKioskMode, setIsKioskMode] = useState(false); // Add this near other state declarations
+  const isKioskMode = true; // Always use kiosk mode
 
   // Add isProcessing state
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // เพิ่มสถานะเพื่อติดตามว่ากำลังรอการตอบกลับจาก Arduino
+  const [waitingForArduinoResponse, setWaitingForArduinoResponse] = useState(false);
 
   const generateQrCodeDataUrl = useCallback((data: SheetData): string => {
     const qrCodeData = JSON.stringify(data);
@@ -392,15 +396,17 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
 
   // แก้ไข Arduino monitoring effect
   useEffect(() => {
-    if (!isRunning || isProcessing) return;
-  
+    if (!isRunning) return;
+    
     // Get the most recent log entry
     const lastMessage = logs[logs.length - 1];
     
-    if (lastMessage?.includes('1')) { // This checks for '1' response from Arduino
+    // เมื่อได้รับข้อมูล '1' กลับมาจาก Arduino และกำลังรออยู่
+    if (lastMessage?.includes('1') && waitingForArduinoResponse) {
       (async () => {
         try {
           setIsProcessing(true);
+          setWaitingForArduinoResponse(false); // รีเซ็ตสถานะการรอ
           console.log('Processing item based on Arduino response 1');
           
           // Generate QR code for the current item
@@ -419,9 +425,11 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
             
             // If target not reached, send command for next item
             if (nextCount < targetCount) {
-              await new Promise(resolve => setTimeout(resolve, 1000));
+              // ลดดีเลย์เหลือเพียง 1 มิลลิวินาที
+              await new Promise(resolve => setTimeout(resolve, 1));
               console.log('Starting next production cycle');
               await sendCommand('110'); // Send command for next cycle
+              setWaitingForArduinoResponse(true); // ตั้งค่าสถานะรอการตอบกลับ
             } else {
               console.log('Production complete');
               await handleStop();
@@ -444,6 +452,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
         } catch (error) {
           console.error('Error processing product:', error);
           setError('เกิดข้อผิดพลาดในการผลิต');
+          setWaitingForArduinoResponse(false); // รีเซ็ตสถานะการรอในกรณีเกิดข้อผิดพลาด
         } finally {
           setIsProcessing(false);
         }
@@ -463,7 +472,8 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
     isProcessing,
     isKioskMode,
     remainingPrints,
-    totalPrints
+    totalPrints,
+    waitingForArduinoResponse // เพิ่ม dependency นี้เพื่อให้ effect ทำงานเมื่อสถานะเปลี่ยน
   ]);
 
   // แก้ไข handleStartProduction
@@ -496,6 +506,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
         console.log('Initial print result in kiosk mode:', printAttempt);
         // In kiosk mode, always send command regardless of print result
         await sendCommand('110');
+        setWaitingForArduinoResponse(true); // ตั้งค่าสถานะว่ากำลังรอการตอบกลับ
         return true;
       } else {
         // In regular mode, only proceed if printing is successful
@@ -503,6 +514,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
         if (printSuccess) {
           console.log('Starting production with target:', activeTarget);
           await sendCommand('110');
+          setWaitingForArduinoResponse(true); // ตั้งค่าสถานะว่ากำลังรอการตอบกลับ
           return true;
         } else {
           throw new Error('การพิมพ์ QR Code ไม่สำเร็จ');
@@ -512,6 +524,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
       console.error('Start production error:', error);
       setError('ไม่สามารถเริ่มการผลิตได้: ' + (error instanceof Error ? error.message : 'Unknown error'));
       setIsRunning(false);
+      setWaitingForArduinoResponse(false); // รีเซ็ตสถานะในกรณีเกิดข้อผิดพลาด
       throw error;
     }
   }, [user, productionData, targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl, isKioskMode]);
@@ -748,13 +761,13 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
               }`}
             >
               <div className="text-white text-center">
-                <div className="text-2xl font-bold mb-2">เริ่มการผลิต</div>
+                <div className="text-2xl font-bold mb-2">เริ่มการผลิตอัตโนมัติ</div>
                 <div className="text-sm opacity-90">
                   {!productionData 
                     ? 'กรุณาเลือกข้อมูลจาก Excel' 
                     : !connected 
                       ? 'รอการเชื่อมต่ออุปกรณ์' 
-                      : `จำนวนปัจจุบัน: ${currentCount}`
+                      : `จำนวนปัจจุบัน: ${currentCount} (พิมพ์อัตโนมัติ)`
                   }
                 </div>
               </div>
@@ -777,20 +790,6 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
             </button>
           </div>
         </div>
-      </div>
-
-      {/* Add Kiosk Mode Toggle */}
-      <div className="flex items-center space-x-2 mb-4">
-        <input
-          type="checkbox"
-          id="kioskMode"
-          checked={isKioskMode}
-          onChange={(e) => setIsKioskMode(e.target.checked)}
-          className="form-checkbox h-4 w-4 text-blue-600"
-        />
-        <label htmlFor="kioskMode" className="text-sm text-gray-600">
-          โหมดการพิมพ์อัตโนมัติ (Kiosk Mode)
-        </label>
       </div>
 
       {/* Production Stats */}

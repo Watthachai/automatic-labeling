@@ -9,9 +9,7 @@ generator client {
 
 enum Role {
   ADMIN
-  SUPERVISOR
-  OPERATOR
-  PHARMACIST
+  USER
 }
 
 enum Status {
@@ -26,7 +24,7 @@ model User {
   id                String             @id @default(cuid())
   username          String             @unique
   password          String
-  role              Role               @default(OPERATOR)
+  role              Role               @default(USER)
   hospitalId        String
   hospital          Hospital           @relation(fields: [hospitalId], references: [id])
   department        String
@@ -38,7 +36,6 @@ model User {
   activeProductions ActiveProduction[] // Rename from productions
   completedLogs     ProductionLog[]
   auditLogs         AuditLog[]
-  twoFactorCodes    TwoFactorCode[]
   productions       Production[] // Add this line to complete the relation
   updatedAt         DateTime           @updatedAt
 }
@@ -99,19 +96,6 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
-}
-
-model TwoFactorCode {
-  id        String   @id @default(cuid())
-  userId    String
-  code      String
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-  isUsed    Boolean  @default(false)
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([code])
 }
 
 model Production {
