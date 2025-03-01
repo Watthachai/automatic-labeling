@@ -75,9 +75,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
   const [totalPrints, setTotalPrints] = useState(0); // จำนวนที่ต้องการปริ้นทั้งหมด
   const [isStopRequested, setIsStopRequested] = useState(false);
   const [hasSentInitialCommand, setHasSentInitialCommand] = useState(false);
-
-
-  // Add new state for completion modal
+  const [hasSaved, setHasSaved] = useState(false); // Move this up with other state declarations
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [completionData, setCompletionData] = useState<{
     totalProduced: number;
@@ -193,6 +191,7 @@ const saveProductionData = useCallback(async () => {
 }, [user, startTime, currentCount, startCount, productionData, generateQrCodeDataUrl, printedCount]);
 
 // แก้ไขฟังก์ชัน saveProductionDataWithRef
+
 const saveProductionDataWithRef = useCallback(async () => {
   if (!user) {
     console.log('ไม่สามารถบันทึกข้อมูลด้วย ref: ไม่พบข้อมูลผู้ใช้');
@@ -213,16 +212,25 @@ const saveProductionDataWithRef = useCallback(async () => {
     user: !!user, 
     startTime: !!startTime,
     startTimeRef: !!startTimeRef.current,
-    isSaving: isSaving.current
+    isSaving: isSaving.current,
+    printedCount,
+    printedCountRef: printedCountRef.current,
+    targetCount
   });
 
   try {
     isSaving.current = true;
     
-    // ใช้ค่าจาก ref เพื่อให้แน่ใจว่าเป็นค่าล่าสุด
-    const actualProduced = Math.max(printedCountRef.current, parseInt(currentCount) || 0, printedCount);
+    // ใช้ค่า targetCount เป็นค่าอ้างอิงเมื่อมีการหยุดการทำงานหลังเสร็จสิ้นครบตามเป้าหมาย
+    const isCompletedRun = printedCountRef.current >= targetCount;
     
-    console.log(`กำลังบันทึกข้อมูลการผลิต (ref): ${actualProduced} units produced`);
+    // ใช้ค่าจาก targetCount เมื่อทำงานเสร็จครบตามเป้าหมาย 
+    // มิฉะนั้นใช้ค่าจริงที่นับได้
+    const actualProduced = isCompletedRun ? 
+      targetCount : 
+      Math.max(printedCountRef.current, parseInt(currentCount) || 0, printedCount);
+    
+    console.log(`กำลังบันทึกข้อมูลการผลิต (ref): ${actualProduced} units produced, isCompleted: ${isCompletedRun}`);
 
     // สร้าง serial numbers ตามจำนวนที่ผลิตจริง
     const serialNumbers = Array.from(
@@ -278,6 +286,7 @@ const saveProductionDataWithRef = useCallback(async () => {
     setPrintedCount(0);
     setCurrentCount('0');
     setStopCount('0');
+    setIsStopRequested(false); // Reset stop request flag
     
     return true;
   } catch (error) {
@@ -286,8 +295,9 @@ const saveProductionDataWithRef = useCallback(async () => {
   } finally {
     isSaving.current = false;
   }
-}, [user, startTime, currentCount, startCount, productionData, generateQrCodeDataUrl, printedCount]);
+}, [user, startTime, currentCount, startCount, productionData, generateQrCodeDataUrl, printedCount, targetCount]);
 
+// Update the handleStop function to prevent duplicate saves
 const handleStop = useCallback(async (forceStop: boolean = false) => {
   console.log('เริ่มการหยุดการทำงาน:', {
     forceStop, 
@@ -295,12 +305,14 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
     user: !!user, 
     startTime: !!startTime,
     startTimeRef: !!startTimeRef.current, 
-    isSaving: isSaving.current
+    isSaving: isSaving.current,
+    hasSaved,
+    saveActionRef: saveActionRef.current
   });
   
   // ป้องกันการเรียกซ้ำ
-  if (isStopRequested) {
-    console.log('Stop already requested, skipping duplicate call');
+  if (isStopRequested || hasSaved || saveActionRef.current || isSaving.current) {
+    console.log('Stop already requested or data already saved, skipping duplicate call');
     return;
   }
   
@@ -314,17 +326,9 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
     return;
   }
   
-  // ใช้ printedCount แทน currentCount ในการตรวจสอบว่าถึงเป้าหมายหรือยัง
-  if (!forceStop && printedCountRef.current < targetCount) {
-    console.log('Production not complete yet - printedCount:', printedCountRef.current, 'targetCount:', targetCount);
-    setIsStopRequested(false);
-    return;
-  }
-
   try {
     // หยุดการทำงาน
     console.log('กำลังหยุดการทำงาน - ตั้งค่า isRunning เป็น false');
-    setIsRunning(false);
     
     // ส่งคำสั่ง 911 เพื่อหยุดการทำงานฉุกเฉิน
     console.log('Sending emergency stop command: 911');
@@ -333,31 +337,35 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
     // รอให้ Arduino มีเวลาประมวลผลคำสั่งหยุดฉุกเฉิน
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // บันทึกข้อมูลการผลิตโดยใช้ startTimeRef
-    await saveProductionDataWithRef();
+    // Set the lock before changing isRunning, so the effect won't trigger a save
+    saveActionRef.current = true;
     
-    // แสดง modal สรุปการผลิต
-    // setShowCompletionModal จะถูกเรียกในฟังก์ชัน saveProductionDataWithRef
-
+    // Now change isRunning state - this will trigger the effect, but it won't save due to the lock
+    setIsRunning(false);
+    
+    // ตรวจสอบว่ายังไม่ได้บันทึกก่อนที่จะบันทึกข้อมูล
+    if (!hasSaved && !isSaving.current) {
+      setHasSaved(true);
+      await saveProductionDataWithRef();
+    } else {
+      console.log('ข้ามการบันทึกข้อมูลเนื่องจากได้บันทึกไปแล้ว');
+    }
+    
     // รีเซ็ตค่าทุกครั้งหลังจากเสร็จสิ้น
     setWaitingForArduinoResponse(false);
-    
-    // เพิ่มการรีเซ็ตค่าทั้งหมดเมื่อการผลิตเสร็จสิ้น
-    printedCountRef.current = 0;
-    setPrintedCount(0);
-    setCurrentCount('0');
-    setStopCount('0');
     
   } catch (error) {
     console.error('Error stopping production:', error);
     setError(error instanceof Error ? error.message : 'Failed to stop production');
+    // Reset the flags in case of error
+    saveActionRef.current = false;
+    setHasSaved(false);
   } finally {
-    setIsRunning(false);
     setIsStopRequested(false);
-    // Reset save flag
+    // Don't reset saveActionRef here, it needs to stay true to prevent the useEffect from triggering
     isSaving.current = false;
   }
-}, [user, startTime, targetCount, printedCountRef, sendCommand, saveProductionDataWithRef]);
+}, [user, startTime, targetCount, printedCountRef, sendCommand, saveProductionDataWithRef, hasSaved]);
 
   // แก้ไขในส่วนของ handlePrintQR เพื่ออัพเดต ref ด้วย
   const handlePrintQR = useCallback(async (qrImage: string, qrData: SheetData, isBlank: boolean = false, currentTargetCount: number = 0) => {
@@ -870,23 +878,45 @@ const handleStartProduction = useCallback(async (inputTarget?: number) => {
     }
   }, [waitingForArduinoResponse, isRunning, printedCount, targetCount]);
 
-  // เพิ่ม useEffect สำหรับติดตาม isRunning เพื่อบันทึกข้อมูล
-const [hasSaved, setHasSaved] = useState(false);
+// เพิ่ม useEffect สำหรับติดตาม isRunning เพื่อบันทึกข้อมูล
+// ใช้ ref เพื่อป้องกันการทำงานซ้ำในรอบเดียวกัน
+const saveActionRef = useRef(false);
+
+// Update the useEffect that tracks isRunning and prevents duplicate saves
+
+// Update the useEffect that tracks isRunning
 
 useEffect(() => {
   console.log(`สถานะการทำงาน: ${isRunning ? 'กำลังทำงาน' : 'หยุดทำงาน'}`);
   
-  // ถ้า isRunning เปลี่ยนเป็น false และมีการปริ้นต์เสร็จแล้ว และยังไม่ได้บันทึกข้อมูล
-  if (!isRunning && printedCountRef.current > 0 && !showCompletionModal && !isSaving.current && !hasSaved) {
-    console.log('isRunning เป็น false และมีการพิมพ์แล้ว - กำลังบันทึกข้อมูล');
-    setHasSaved(true); // ตั้งค่าว่าได้บันทึกข้อมูลแล้วเพื่อป้องกันการ save ซ้ำ
-    saveProductionDataWithRef();
-  }
+  // Add a small delay to make sure any direct save call from handleStop has a chance to set flags
+  const timeoutId = setTimeout(() => {
+    // Only save if isRunning is false AND not already saved AND no save is in progress
+    if (!isRunning && printedCountRef.current > 0 && !showCompletionModal && !isSaving.current && !hasSaved && !saveActionRef.current) {
+      console.log('isRunning เป็น false และมีการพิมพ์แล้ว - กำลังบันทึกข้อมูลผ่าน effect');
+      // Lock to prevent multiple saves
+      saveActionRef.current = true;
+      setHasSaved(true); 
+      
+      saveProductionDataWithRef()
+        .finally(() => {
+          // Only reset printedCount and other display values when the save operation is truly complete
+          printedCountRef.current = 0;
+          setPrintedCount(0);
+          setCurrentCount('0');
+          setStopCount('0');
+          // Keep saveActionRef.current as true to prevent further saves until reset
+        });
+    }
+  }, 100); // Small delay to ensure handleStop's direct save call has priority
   
-  // รีเซ็ตค่า hasSaved เมื่อเริ่มการทำงานใหม่
+  // รีเซ็ตค่า hasSaved และ saveActionRef เมื่อเริ่มการทำงานใหม่
   if (isRunning) {
     setHasSaved(false);
+    saveActionRef.current = false;
   }
+  
+  return () => clearTimeout(timeoutId);
 }, [isRunning, printedCountRef.current, showCompletionModal, saveProductionDataWithRef, hasSaved]);
 
   const material = productionData?.Material;
@@ -929,6 +959,10 @@ const resetAllValues = useCallback(() => {
   setTargetCount(0);
   setStartCount('0');
   setShowCompletionModal(false);
+  setHasSaved(false);
+  saveActionRef.current = false;
+  setIsStopRequested(false);
+  isSaving.current = false;
 }, []);
 
   if (isLoading) {
