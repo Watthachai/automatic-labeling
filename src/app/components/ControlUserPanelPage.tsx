@@ -437,8 +437,9 @@ useEffect(() => {
         setWaitingForArduinoResponse(false); // รีเซ็ตสถานะการรอ
         console.log('Received response 1 from Arduino, ready for next cycle');
         
-        // ตรวจสอบว่าได้พิมพ์ครบตามเป้าหมายหรือยัง
-        if (printedCount < targetCount) {
+        // ตรวจสอบแบบเข้มงวดว่ายังไม่ถึงเป้าหมาย
+        // อัพเดตเงื่อนไข - ต้องน้อยกว่าเป้าหมายอย่างน้อย 1
+        if (printedCount < targetCount - 1) {
           // Generate QR code for the next item
           const qrData = { 
             ...productionData,
@@ -457,8 +458,8 @@ useEffect(() => {
           // ตั้งค่าให้รอการตอบกลับจาก Arduino ในรอบถัดไป
           setWaitingForArduinoResponse(true);
         } else {
-          // ถ้าพิมพ์ครบตามเป้าหมายแล้ว ให้หยุดการทำงาน
-          console.log('Production complete - reached target count');
+          // ถึงชิ้นสุดท้ายแล้ว (หรือเกินไปแล้ว)
+          console.log('Production complete or at final item - reached target count');
           await handleStop(true);
         }
       } catch (error) {
@@ -486,7 +487,7 @@ useEffect(() => {
   printedCount
 ]);
 
-  // แก้ไข handleStartProduction เพื่อให้พิมพ์ QR code ทันทีเมื่อส่งคำสั่ง 110
+  // แก้ไข handleStartProduction เพื่อเพิ่มการตรวจสอบ
 
 const handleStartProduction = useCallback(async (inputTarget?: number) => {
   try {
@@ -496,6 +497,9 @@ const handleStartProduction = useCallback(async (inputTarget?: number) => {
     if (!user?.id || !productionData?.Batch || !productionData?.Material) {
       throw new Error('ข้อมูลไม่ครบถ้วน');
     }
+
+    // ตรวจสอบว่าถ้า targetCount เป็น 1 จะไม่ส่ง 110 เกิน
+    const needsMoreCycles = activeTarget > 1;
 
     // Set total prints and remaining prints
     setTotalPrints(activeTarget);
@@ -510,32 +514,27 @@ const handleStartProduction = useCallback(async (inputTarget?: number) => {
     
     const qrImage = generateQrCodeDataUrl(qrData);
     
-    // ในโหมด kiosk, สั่งการพิมพ์ทันที
-    if (isKioskMode) {
-      console.log('Starting production in kiosk mode with target:', activeTarget);
-      
-      // ส่งคำสั่งไปยัง Arduino ก่อน
-      await sendCommand('110');
-      
-      // จากนั้นพิมพ์ QR code ทันที โดยไม่ต้องรอการตอบกลับจาก Arduino
-      const printAttempt = await handlePrintQR(qrImage, qrData);
-      console.log('Initial print result in kiosk mode:', printAttempt);
-      
-      // ตั้งสถานะว่ากำลังรอการตอบกลับเพื่อเริ่มรอบต่อไป
-      setWaitingForArduinoResponse(true);
-      return true;
-    } else {
-      // ในโหมดปกติ ให้มีการยืนยันก่อนพิมพ์
-      const printSuccess = await handlePrintQR(qrImage, qrData);
-      if (printSuccess) {
-        console.log('Starting production with target:', activeTarget);
-        await sendCommand('110');
-        setWaitingForArduinoResponse(true);
-        return true;
-      } else {
-        throw new Error('การพิมพ์ QR Code ไม่สำเร็จ');
-      }
+    console.log('Starting production in kiosk mode with target:', activeTarget);
+    
+    // ส่งคำสั่งไปยัง Arduino ก่อน
+    await sendCommand('110');
+    
+    // จากนั้นพิมพ์ QR code ทันที
+    const printAttempt = await handlePrintQR(qrImage, qrData);
+    console.log('Initial print result in kiosk mode:', printAttempt);
+    
+    // ตั้งสถานะว่ากำลังรอการตอบกลับเพื่อเริ่มรอบต่อไป
+    // ตั้งเป็น true เฉพาะเมื่อต้องการพิมพ์มากกว่า 1 ชิ้น
+    setWaitingForArduinoResponse(needsMoreCycles);
+    
+    // หากมีการตั้งค่าให้พิมพ์เพียง 1 ชิ้น ให้หยุดทันที
+    if (activeTarget === 1) {
+      // เพิ่ม delay เล็กน้อย
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await handleStop(true);
     }
+    
+    return true;
   } catch (error) {
     console.error('Start production error:', error);
     setError('ไม่สามารถเริ่มการผลิตได้: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -543,7 +542,7 @@ const handleStartProduction = useCallback(async (inputTarget?: number) => {
     setWaitingForArduinoResponse(false);
     throw error;
   }
-}, [user, productionData, targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl, isKioskMode]);
+}, [user, productionData, targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl, handleStop]);
 
   const handleStart = useCallback(() => {
     if (!productionData) {
