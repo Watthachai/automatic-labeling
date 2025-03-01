@@ -200,9 +200,14 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
           iframe.contentWindow?.print();
           iframe.contentWindow?.addEventListener('afterprint', () => {
             cleanup();
-            setPrintedCount(prev => prev + 1);
+            const newPrintedCount = printedCount + 1;
+            setPrintedCount(newPrintedCount);
             setRemainingPrints(prev => prev - 1);
-            console.log(`Print completed: ${printedCount + 1}/${targetCount}`);
+            
+            // อัพเดต stopCount ทุกครั้งที่พิมพ์สำเร็จ
+            setStopCount(newPrintedCount.toString());
+            
+            console.log(`พิมพ์เสร็จสิ้น: ${newPrintedCount}/${targetCount}`);
             resolve(true); // Always resolve true in kiosk mode
           });
           
@@ -210,9 +215,14 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
           setTimeout(() => {
             if (document.body.contains(iframe)) {
               cleanup();
-              setPrintedCount(prev => prev + 1);
+              const newPrintedCount = printedCount + 1;
+              setPrintedCount(newPrintedCount);
               setRemainingPrints(prev => prev - 1);
-              console.log(`Print timeout - assuming completed: ${printedCount + 1}/${targetCount}`);
+              
+              // อัพเดต stopCount ทุกครั้งที่พิมพ์สำเร็จ
+              setStopCount(newPrintedCount.toString());
+              
+              console.log(`Print timeout - assuming completed: ${newPrintedCount}/${targetCount}`);
               resolve(true);
             }
           }, 5000);
@@ -222,9 +232,14 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
             iframe.contentWindow?.print();
             iframe.contentWindow?.addEventListener('afterprint', () => {
               cleanup();
-              setPrintedCount(prev => prev + 1);
+              const newPrintedCount = printedCount + 1;
+              setPrintedCount(newPrintedCount);
               setRemainingPrints(prev => prev - 1);
-              console.log(`Print completed: ${printedCount + 1}/${targetCount}`);
+              
+              // อัพเดต stopCount ทุกครั้งที่พิมพ์สำเร็จ
+              setStopCount(newPrintedCount.toString());
+              
+              console.log(`พิมพ์เสร็จสิ้น: ${newPrintedCount}/${targetCount}`);
               resolve(true);
             });
             
@@ -232,9 +247,14 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
             setTimeout(() => {
               if (document.body.contains(iframe)) {
                 cleanup();
-                setPrintedCount(prev => prev + 1);
+                const newPrintedCount = printedCount + 1;
+                setPrintedCount(newPrintedCount);
                 setRemainingPrints(prev => prev - 1);
-                console.log(`Print timeout - assuming completed: ${printedCount + 1}/${targetCount}`);
+                
+                // อัพเดต stopCount ทุกครั้งที่พิมพ์สำเร็จ
+                setStopCount(newPrintedCount.toString());
+                
+                console.log(`Print timeout - assuming completed: ${newPrintedCount}/${targetCount}`);
                 resolve(true);
               }
             }, 5000);
@@ -580,14 +600,20 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
   // เพิ่ม useEffect สำหรับ monitor การเปลี่ยนแปลงของ state
   useEffect(() => {
     if (isRunning) {
+      // อัพเดทค่า stopCount ให้ตรงกับ currentCount เพื่อให้แสดงค่าถูกต้อง
+      setStopCount(currentCount);
+      
+      // Update console log เพื่อการดีบัก
       console.log('Production state updated:', {
         targetCount,
         currentCount,
         startCount,
-        isRunning
+        printedCount,
+        isRunning,
+        waitingForArduinoResponse
       });
     }
-  }, [targetCount, currentCount, startCount, isRunning]);
+  }, [targetCount, currentCount, startCount, isRunning, printedCount, waitingForArduinoResponse]);
 
   // Monitor targetCount changes
   useEffect(() => {
@@ -600,6 +626,17 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
   const batch = productionData?.Batch;
   const vendorBatch = productionData?.["Vendor Batch"]; // Access with bracket notation for keys with spaces
   const materialDescription = productionData?.["Material Description"];
+
+  // คำนวณ duration แบบละเอียด (นาทีและวินาที)
+  const getDuration = (startTime: Date | null): string => {
+    if (!startTime) return '0 นาที 0 วินาที';
+    
+    const totalSeconds = Math.floor((Date.now() - startTime.getTime()) / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `${minutes} นาที ${seconds} วินาที`;
+  };
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -620,10 +657,10 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-xl font-semibold text-gray-800">
-              Welcome, {user?.username}
+              สวัสดี, {user?.username}
             </h2>
             <p className="text-sm text-gray-600">
-              Hospital ID: {user?.hospitalId} • Department: {user?.department}
+              รหัสโรงพยาบาล: {user?.hospitalId} • แผนก: {user?.department}
             </p>
           </div>
           <div className="flex items-center space-x-4">
@@ -642,7 +679,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
               }}
               className="px-4 py-2 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
             >
-              Sign Out
+              ออกจากระบบ
             </button>
           </div>
         </div>
@@ -703,7 +740,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
       {/* Production Details Card */}
       <div className="bg-white shadow-lg rounded-lg overflow-hidden">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
-          <h3 className="text-lg font-semibold text-white flex">Production Details 
+          <h3 className="text-lg font-semibold text-white flex">รายละเอียดการผลิต 
           {qrCodeDataUrl ? (
               <Image 
                 src={qrCodeDataUrl} 
@@ -714,7 +751,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
             />
           ) : (
             <div className="text-gray-500">
-              No QR code generated yet
+              ยังไม่มีการสร้าง QR code
             </div>
           )}
         </h3>
@@ -722,22 +759,22 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
         <div className="p-6 grid md:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-lg p-4">
-              <label className="text-sm font-medium text-gray-500">Material</label>
-              <p className="text-lg font-semibold text-gray-900">{material || 'N/A'}</p>
+              <label className="text-sm font-medium text-gray-500">รหัสวัสดุ</label>
+              <p className="text-lg font-semibold text-gray-900">{material || 'ไม่มีข้อมูล'}</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-4">
-              <label className="text-sm font-medium text-gray-500">Batch Number</label>
-              <p className="text-lg font-semibold text-gray-900">{batch || 'N/A'}</p>
+              <label className="text-sm font-medium text-gray-500">รหัส Batch</label>
+              <p className="text-lg font-semibold text-gray-900">{batch || 'ไม่มีข้อมูล'}</p>
             </div>
           </div>
           <div className="space-y-4">
             <div className="bg-gray-50 rounded-lg p-4">
-              <label className="text-sm font-medium text-gray-500">Material Description</label>
-              <p className="text-lg font-semibold text-gray-900">{materialDescription || 'N/A'}</p>
+              <label className="text-sm font-medium text-gray-500">คำอธิบายวัสดุ</label>
+              <p className="text-lg font-semibold text-gray-900">{materialDescription || 'ไม่มีข้อมูล'}</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-4">
               <label className="text-sm font-medium text-gray-500">Vendor Batch</label>
-              <p className="text-lg font-semibold text-gray-900">{vendorBatch || 'N/A'}</p>
+              <p className="text-lg font-semibold text-gray-900">{vendorBatch || 'ไม่มีข้อมูล'}</p>
             </div>
           </div>
         </div>
@@ -796,35 +833,35 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
       {isRunning && (
         <div className="bg-white shadow-lg rounded-lg overflow-hidden">
           <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
-            <h3 className="text-lg font-semibold text-white">Live Statistics</h3>
+            <h3 className="text-lg font-semibold text-white">สถิติการผลิตแบบเรียลไทม์</h3>
           </div>
           <div className="p-6">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-purple-50 rounded-lg p-4 text-center">
-                <div className="text-sm font-medium text-purple-600">Start Time</div>
+                <div className="text-sm font-medium text-purple-600">เวลาเริ่มต้น</div>
                 <div className="text-lg font-bold text-purple-900">
                   {startTime?.toLocaleTimeString()}
                 </div>
               </div>
               <div className="bg-purple-50 rounded-lg p-4 text-center">
-                <div className="text-sm font-medium text-purple-600">Duration</div>
+                <div className="text-sm font-medium text-purple-600">ระยะเวลา</div>
                 <div className="text-lg font-bold text-purple-900">
-                  {startTime ? Math.floor((Date.now() - startTime.getTime()) / 60000) : 0} min
+                  {startTime ? getDuration(startTime) : '0 นาที 0 วินาที'}
                 </div>
               </div>
               <div className="bg-purple-50 rounded-lg p-4 text-center">
-                <div className="text-sm font-medium text-purple-600">Units Produced</div>
+                <div className="text-sm font-medium text-purple-600">จำนวนที่ผลิตแล้ว</div>
                 <div className="text-lg font-bold text-purple-900">
-                  {parseInt(stopCount) - parseInt(startCount)}
+                  {printedCount} ชิ้น
                 </div>
               </div>
               <div className="bg-purple-50 rounded-lg p-4 text-center">
-                <div className="text-sm font-medium text-purple-600">Status</div>
-                <div className="text-lg font-bold text-green-600">Active</div>
+                <div className="text-sm font-medium text-purple-600">สถานะ</div>
+                <div className="text-lg font-bold text-green-600">กำลังทำงาน</div>
               </div>
               {/* Add Target Progress */}
               <div className="bg-purple-50 rounded-lg p-4 text-center md:col-span-2">
-                <div className="text-sm font-medium text-purple-600">Progress</div>
+                <div className="text-sm font-medium text-purple-600">ความคืบหน้า</div>
                 <div className="text-lg font-bold text-purple-900">
                   {printedCount} / {targetCount}
                   <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
@@ -856,13 +893,14 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
                 <div className="text-sm font-medium text-gray-500">ระยะเวลาการผลิต</div>
                 <div className="text-2xl font-bold text-gray-900">
                   {completionData.startTime && completionData.endTime ? 
-                    `${Math.floor((completionData.endTime.getTime() - completionData.startTime.getTime()) / 60000)} นาที` 
-                    : 'N/A'}
+                    `${Math.floor((completionData.endTime.getTime() - completionData.startTime.getTime()) / 60000)} นาที 
+                     ${Math.floor(((completionData.endTime.getTime() - completionData.startTime.getTime()) % 60000) / 1000)} วินาที` 
+                    : 'ไม่มีข้อมูล'}
                 </div>
               </div>
 
               <div className="bg-gray-50 rounded-lg p-4">
-                <div className="text-sm font-medium text-gray-500">Serial Numbers</div>
+                <div className="text-sm font-medium text-gray-500">รหัสซีเรียล</div>
                 <div className="mt-2 text-sm text-gray-600 max-h-32 overflow-y-auto">
                   {completionData.serialNumbers.map((sn) => (
                     <div key={sn} className="py-1 border-b border-gray-100 last:border-0">
