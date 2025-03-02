@@ -20,8 +20,8 @@ void loop() {
 
   if (Mode == 110) {
     Serial.println("Mode 110");
-    delay(1000);
-    Serial.println("111"); //OK
+    delay(5000);
+    Serial.println("1"); //OK
   }
 }
 
