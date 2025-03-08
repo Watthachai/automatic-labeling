@@ -12,7 +12,8 @@
 
 # testing
 /coverage
-
+/scripts/*
+/automatic-labeling/scripts/
 # next.js
 /.next/
 /out/
@@ -38,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scripts (sensitive content)
+/scripts/**/*
+!/scripts/.gitkeep
+/scripts/add-operators.ts
+/scripts/*.config
+/scripts/*.secret.*

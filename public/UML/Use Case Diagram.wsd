@@ -1,0 +1,55 @@
+@startuml "ระบบติดฉลากอัตโนมัติสำหรับโรงพยาบาล"
+!pragma layout smetana
+
+skinparam defaultFontName "Prompt"
+skinparam backgroundColor #ffffff
+' Define actors
+actor "ผู้ดูแลระบบ (ADMIN)" as Admin
+actor "ผู้ปฏิบัติงาน (USER)" as User
+
+' Define system boundary
+rectangle "ระบบติดฉลากอัตโนมัติสำหรับโรงพยาบาล" {
+  usecase "เข้าสู่ระบบ" as UC1
+  usecase "ออกจากระบบ" as UC2
+  usecase "เปลี่ยนรหัสผ่าน" as UC3
+  
+  usecase "นำเข้าข้อมูลจาก Excel" as UC4
+  usecase "เริ่มกระบวนการผลิต" as UC5
+  usecase "พิมพ์ QR Code" as UC6
+  usecase "สั่งการอุปกรณ์ Arduino" as UC7
+  usecase "หยุดกระบวนการผลิต" as UC8
+  usecase "ดูประวัติการผลิต" as UC9
+  
+  usecase "สร้างและจัดการผู้ใช้" as UC10
+  usecase "จัดการข้อมูลวัตถุดิบ" as UC11
+  usecase "ตรวจสอบและยืนยันการผลิต" as UC12
+  usecase "ดูรายงานการตรวจสอบ" as UC13
+  usecase "ใช้งานโหมด Debug" as UC14
+}
+
+' Define relationships
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+User --> UC8
+User --> UC9
+
+Admin --> UC1
+Admin --> UC2
+Admin --> UC3
+Admin --> UC9
+Admin --> UC10
+Admin --> UC11
+Admin --> UC12
+Admin --> UC13
+Admin --> UC14
+
+' Include relationships
+UC5 ..> UC6 : <<include>>
+UC5 ..> UC7 : <<include>>
+UC6 ..> UC7 : <<include>>
+
+@enduml

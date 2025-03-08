@@ -1,0 +1,45 @@
+@startuml Production Process Sequence
+skinparam defaultFontName "Prompt"
+skinparam backgroundColor #ffffff
+
+actor "ผู้ปฏิบัติงาน" as User
+participant "หน้าควบคุมการผลิต" as ControlPage
+participant "ระบบควบคุม\nการผลิต" as System
+participant "Arduino\nController" as Arduino
+participant "เครื่องพิมพ์" as Printer
+database "ฐานข้อมูล" as DB
+
+User -> ControlPage++ : เลือกข้อมูลการผลิต
+User -> ControlPage : กำหนดจำนวนที่ต้องการผลิต
+User -> ControlPage : กดปุ่มเริ่มการผลิต
+ControlPage -> System++ : ส่งข้อมูลการผลิต
+
+System -> System : สร้าง QR Code
+System -> Printer++ : ส่ง QR Code ไปพิมพ์
+Printer --> System-- : พิมพ์สำเร็จ
+
+System -> Arduino++ : ส่งคำสั่งเริ่มการทำงาน (110)
+Arduino --> System : ตอบกลับพร้อมทำงาน
+
+loop จนกว่าจะครบจำนวนที่กำหนด
+    Arduino -> System : แจ้งความพร้อมสำหรับชิ้นถัดไป (1)
+    System -> System : สร้าง QR Code ใหม่
+    System -> Printer++ : ส่ง QR Code ไปพิมพ์
+    Printer --> System : พิมพ์สำเร็จ
+    System -> Arduino : ส่งคำสั่งดำเนินการต่อ (110)
+    System -> ControlPage : อัปเดตจำนวนที่ผลิต
+    ControlPage --> User : แสดงจำนวนที่ผลิต
+    deactivate Printer
+end
+
+User -> ControlPage : กดปุ่มหยุดการผลิต
+ControlPage -> System : ส่งคำสั่งหยุดการผลิต
+System -> Arduino-- : ส่งคำสั่งหยุดการทำงาน
+System -> System : สร้าง QR Code สรุป
+System -> DB++ : บันทึกข้อมูลการผลิต
+System -> ControlPage : ส่งข้อมูลสรุปการผลิต
+ControlPage --> User : แสดงหน้าสรุปการผลิต
+deactivate ControlPage
+deactivate System
+deactivate DB
+@enduml

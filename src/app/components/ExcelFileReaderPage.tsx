@@ -11,10 +11,11 @@ interface SheetData {
 }
 
 interface Props {
-  onDataSelect: (rowData: SheetData) => void;
+  onDataSelect: (rowData: SheetData, qrCodeDataUrl: string) => void;
+  onQrCodeGenerated?: (qrCodeUrl: string) => void;
 }
 
-const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
+const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect, onQrCodeGenerated }) => {
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [sheetData, setSheetData] = useState<SheetData[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
@@ -79,7 +80,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
     const qrCodeElement = (
       <QRCode
         value={qrCodeData}
-        size={150}
+        size={100} // Reduced size
         level="L"
       />
     );
@@ -107,34 +108,38 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
     const newQrCodeDataUrl = generateQrCodeDataUrl(selectedRowData);
     qrCodeDataUrlRef.current = newQrCodeDataUrl;
 
+    // Add this line to pass the QR code URL up
+    if (onQrCodeGenerated) {
+      onQrCodeGenerated(newQrCodeDataUrl);
+    }
+
     // Add content to the iframe
     iframeDocument.body.innerHTML = `
-      <div class="print-section">
-        <div style="display: flex; gap: 0mm; width: 50mm;">
-          
-          <div style="flex-shrink: 0; width: auto;">
-            <img src="${qrCodeDataUrlRef.current}" style="width: 20mm; height: 20mm;" />
-          </div>
+    <div class="print-section" style="width: 50mm; height: 20mm; display: flex; align-items: center; padding: 0mm; font-family: Arial, sans-serif;">
+      
+      <!-- QR Code Section -->
+      <div style="width: 20mm; height: 20mm; flex-shrink: 0;">
+        <img src="${qrCodeDataUrlRef.current}" style="width: 100%; height: 100%;" />
+      </div>
 
-          <div style="flex-grow: 1; font-weight: bold; padding-left: 4mm; width: auto; font-size: 6pt;">
-            <div>MAT: ${selectedRowData.Material} - UNIT: ${selectedRowData.Unit}</div>
-            <div>BATCH: ${selectedRowData.Batch}</div>
-            <div>${selectedRowData["Material Description"]}</div>
-            <div style="margin-top: 2mm;">
-              UNIT: ${selectedRowData.Unit}
-            </div>
-            <div>
-              Expire date: ${typeof selectedRowData["SLED/BBD"] === 'number'
-                ? convertExcelDateToJSDate(selectedRowData["SLED/BBD"])
-                : selectedRowData["SLED/BBD"]}
-            </div>
-            <div>
-              Vendor Batch: ${selectedRowData["Vendor Batch"]}
-            </div>
-          </div>
+      <!-- Text Section -->
+      <div style="flex-grow: 1; padding-left: 2mm; font-size: 5pt; line-height: 1.2;">
+        <div style="font-weight: bold;">MAT: ${selectedRowData.Material}-UNIT:${selectedRowData.Unit}</div>
+        <div style="font-weight: bold;">BATCH: ${selectedRowData.Batch}</div>
+        <div style="font-weight: bold;">${selectedRowData["Material Description"]}</div>
+
+        <!-- Row for UNIT, Expiry, Vendor Batch -->
+        <div style="display: flex; margin-top: 1mm; font-size: 5pt;">
+          <div style="flex: 1;"><b>UNIT</b><br>${selectedRowData.Unit}</div>
+          <div style="flex: 1;"><b>Expire date</b><br>${typeof selectedRowData["SLED/BBD"] === 'number'
+            ? convertExcelDateToJSDate(selectedRowData["SLED/BBD"])
+            : selectedRowData["SLED/BBD"]}</div>
+          <div style="flex: 1;"><b>Vendor Batch</b><br>${selectedRowData["Vendor Batch"]}</div>
         </div>
       </div>
-    `;
+
+    </div>
+  `;
 
     // Print the iframe
     iframe.contentWindow?.focus();
@@ -144,7 +149,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
     setTimeout(() => {
       document.body.removeChild(iframe);
     }, 100);
-  }, [generateQrCodeDataUrl, selectedRowData, convertExcelDateToJSDate]);
+  }, [generateQrCodeDataUrl, selectedRowData, convertExcelDateToJSDate, onQrCodeGenerated]);
 
   const togglePreview = useCallback(() => {
     setIsPreviewVisible(!isPreviewVisible);
@@ -155,7 +160,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
     setQrCodeDataUrl(newQrCodeDataUrl);
     qrCodeDataUrlRef.current = newQrCodeDataUrl;
     setSelectedRowData(row);
-    onDataSelect(row);
+    onDataSelect(row, newQrCodeDataUrl); // Pass QR code data URL
   }, [generateQrCodeDataUrl, onDataSelect]);
 
   return (
@@ -183,7 +188,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
           <svg className="h-14 w-8 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
           </svg>
-          <span className="text-sm text-gray-600 mx-auto text-green-700">{selectedFile.name}</span>
+          <span className="text-sm text-green-700 mx-auto">{selectedFile.name}</span>
           <button 
             onClick={(e) => {
               e.preventDefault();
@@ -198,7 +203,7 @@ const ExcelFileReaderPage: React.FC<Props> = ({ onDataSelect }) => {
             className="text-gray-400 hover:text-red-500"
           >
             <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 011.414 1.414L11.414 10l4.293 4.293a1 1 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
             </svg>
           </button>
         </div>

@@ -1,0 +1,29 @@
+@startuml
+skinparam defaultFontName "Prompt"
+skinparam backgroundColor #ffffff
+
+actor "ผู้ใช้งาน" as User
+participant "หน้า Login" as LoginPage
+participant "ระบบตรวจสอบ\nการเข้าสู่ระบบ" as Auth
+database "ฐานข้อมูล" as DB
+
+User -> LoginPage++ : กรอกชื่อผู้ใช้และรหัสผ่าน
+User -> LoginPage : กดปุ่มเข้าสู่ระบบ
+LoginPage -> Auth++ : ส่งข้อมูลเพื่อตรวจสอบ
+Auth -> DB++ : ค้นหาข้อมูลผู้ใช้
+DB --> Auth-- : ส่งข้อมูลผู้ใช้กลับ
+Auth -> Auth : ตรวจสอบความถูกต้อง
+
+alt การเข้าสู่ระบบสำเร็จ
+    Auth --> LoginPage : เข้าสู่ระบบสำเร็จ
+    Auth -> DB++ : บันทึกเวลาเข้าสู่ระบบ
+    DB --> Auth-- : บันทึกสำเร็จ
+    LoginPage --> User : แสดงหน้าหลักตามสิทธิ์
+else การเข้าสู่ระบบล้มเหลว
+    Auth --> LoginPage : เข้าสู่ระบบล้มเหลว
+    LoginPage --> User : แสดงข้อความแจ้งเตือน
+end
+
+deactivate Auth
+deactivate LoginPage
+@enduml
