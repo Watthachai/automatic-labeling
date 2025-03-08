@@ -807,6 +807,7 @@ useEffect(() => {
       setPrintedCount(0);
       setCurrentCount('0');
       setStopCount('0');
+      await sendCommand('100');
 
       // สร้าง startTime ก่อนและเก็บไว้ในตัวแปร
       const newStartTime = new Date();
@@ -831,6 +832,7 @@ useEffect(() => {
 
       // รอให้ state อัพเดต
       await new Promise(resolve => setTimeout(resolve, 500));
+
 
       // Log เพื่อตรวจสอบว่า startTime และ targetCount ถูกตั้งค่าไว้แล้ว
       console.log('ตรวจสอบค่าก่อนเริ่มผลิต:', {
