@@ -97,7 +97,7 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
 
   // 1️⃣ เพิ่มฟังก์ชันนี้ หลังจาก useState, useRef
     const printInitialQRCodes = async (target: number) => {
-      const firstBatch = Math.min(target, 15); // พิมพ์มากสุด 15 ชิ้นก่อน
+      const firstBatch = Math.min(target, 16); // พิมพ์มากสุด 16 ชิ้นก่อน
       console.log(`Printing first ${firstBatch} QR codes...`);
 
       for (let i = 1; i <= firstBatch; i++) {
@@ -592,7 +592,7 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
                 console.log(`Print timeout - assuming completed: ${newPrintedCount}/${targetCount}`);
                 resolve(true);
               }
-            }, 1000);
+            }, 200);
           } else {
             cleanup();
             resolve(false);
@@ -682,7 +682,7 @@ useEffect(() => {
         await handlePrintQR(qrImage, qrData as SheetData, false, targetCount);
 
         // เพิ่มดีเลย์เพื่อรอให้แน่ใจว่า state อัปเดตแล้ว
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
 
         // ตั้งค่ารอสัญญาณครั้งใหม่ ถ้ายังไม่ถึงเป้าหมาย
         if (printedCount < targetCount && !isStopRequested) {
@@ -724,19 +724,13 @@ useEffect(() => {
       ]);
 
       // 1️⃣ พิมพ์ QR Code จริงก่อน
-      const printedCount = await printInitialQRCodes(activeTarget);
-      console.log(`จำนวนที่พิมพ์แล้ว: ${printedCount}`);
+      await printInitialQRCodes(activeTarget);
 
-      if (printedCount < activeTarget) {
-        console.log(`ต้องพิมพ์เพิ่มอีก ${activeTarget - printedCount} ชิ้น`);
-      }
-
-
-      // 2️⃣ พิมพ์ QR เปล่า (10 ชิ้น) เพื่อเลื่อนสติกเกอร์ให้อยู่ด้านหน้า
-      const blankCount = Math.max(0, 15 - activeTarget);
-      console.log(`Printing ${blankCount} empty QR codes for positioning...`);
-      for (let i = 1; i <= blankCount; i++) {
-        console.log(`Printing empty QR ${i}/${blankCount}`);
+      // 2️⃣ พิมพ์ QR เปล่า `(16 - N)` ชิ้น เพื่อเลื่อนสติกเกอร์ให้อยู่ด้านหน้า
+      const blankBeforeProduction = Math.max(0, 16 - activeTarget);
+      console.log(`Printing ${blankBeforeProduction} empty QR codes for positioning...`);
+      for (let i = 1; i <= blankBeforeProduction; i++) {
+        console.log(`Printing empty QR ${i}/${blankBeforeProduction}`);
         await handlePrintQR('', {} as SheetData, true, activeTarget);
       }
 
@@ -752,11 +746,9 @@ useEffect(() => {
         console.log(`Now producing ${i}/${activeTarget} - Sending 110`);
         await sendCommand('110');
 
-        // ✅ พิมพ์ QR เปล่า **เพิ่มอีก 5 ชิ้นระหว่างการผลิต**
-        if (i <= 5) {
-          console.log(`Printing empty QR during production: ${i}/5`);
-          await handlePrintQR('', {} as SheetData, true, activeTarget);
-        }
+        // ✅ พิมพ์ QR เปล่าตามจำนวนที่พิมพ์จริง (N ชิ้น)
+        console.log(`Printing empty QR during production: ${i}/${activeTarget}`);
+        await handlePrintQR('', {} as SheetData, true, activeTarget);
 
         // ✅ รอสัญญาณจาก Arduino ก่อนผลิตชิ้นถัดไป
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -770,9 +762,6 @@ useEffect(() => {
       setError('ไม่สามารถเริ่มการผลิตได้');
     }
   }, [targetCount, sendCommand, handlePrintQR]);
-
-
-
 
   const handleStart = useCallback(() => {
     if (!productionData) {
@@ -807,6 +796,7 @@ useEffect(() => {
       setPrintedCount(0);
       setCurrentCount('0');
       setStopCount('0');
+      await sendCommand('100');
 
       // สร้าง startTime ก่อนและเก็บไว้ในตัวแปร
       const newStartTime = new Date();
@@ -831,6 +821,7 @@ useEffect(() => {
 
       // รอให้ state อัพเดต
       await new Promise(resolve => setTimeout(resolve, 500));
+
 
       // Log เพื่อตรวจสอบว่า startTime และ targetCount ถูกตั้งค่าไว้แล้ว
       console.log('ตรวจสอบค่าก่อนเริ่มผลิต:', {

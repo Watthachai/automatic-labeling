@@ -86,7 +86,7 @@ export default function LoginPage() {
           {/* Logo and Welcome Text */}
           <div className="text-center">
             <Image
-              src="/hospital-logo.png"
+              src="/logo.png"
               alt="โลโก้โรงพยาบาล"
               width={80}
               height={80}
