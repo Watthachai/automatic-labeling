@@ -36,6 +36,24 @@ interface UserData {
   department: string;
 }
 
+interface ProductionLogData {
+  userId: string;
+  username: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  startCount: number;
+  endCount: number;
+  totalProduced: number;
+  material: string;
+  batch: string;
+  vendorBatch: string;
+  materialDescription: string;
+  qrCodeData: string;
+  qrCodeImage: string;
+  serialNumbers: string[];
+  [key: string]: string | number | boolean | string[] | undefined;
+}
 export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, onQrCodeGenerated }: Props) {
 
   const router = useRouter();
@@ -53,6 +71,8 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
   const [inputTargetCount, setInputTargetCount] = useState<string>(''); // Added state for input value
   const [printedCount, setPrintedCount] = useState(0); // Add state for tracking printed QR codes
   const [isPrinting, setIsPrinting] = useState(false);
+  const [remainingPrints, setRemainingPrints] = useState(0); // จำนวนที่เหลือที่จะปริ้นในรอบนี้
+  const [totalPrints, setTotalPrints] = useState(0); // จำนวนที่ต้องการปริ้นทั้งหมด
   const [isStopRequested, setIsStopRequested] = useState(false);
   const [hasSentInitialCommand, setHasSentInitialCommand] = useState(false);
   const [hasSaved, setHasSaved] = useState(false); // Move this up with other state declarations
@@ -63,14 +83,31 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
     endTime: Date | null;
     serialNumbers: string[];
   } | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
 
   // Add new state for kiosk mode
   // const [isKioskMode, setIsKioskMode] = useState(false); // Add this near other state declarations
   const isKioskMode = true; // Always use kiosk mode
 
+  // Add isProcessing state
+  const [isProcessing, setIsProcessing] = useState(false);
+
   // เพิ่มสถานะเพื่อติดตามว่ากำลังรอการตอบกลับจาก Arduino
   const [waitingForArduinoResponse, setWaitingForArduinoResponse] = useState(false);
+
+
+  // 1️⃣ เพิ่มฟังก์ชันนี้ หลังจาก useState, useRef
+    const printInitialQRCodes = async (target: number) => {
+      const firstBatch = Math.min(target, 15); // พิมพ์มากสุด 15 ชิ้นก่อน
+      console.log(`Printing first ${firstBatch} QR codes...`);
+
+      for (let i = 1; i <= firstBatch; i++) {
+        console.log(`Printing QR Code ${i}/${target}`);
+        await handlePrintQR(qrCodeDataUrl, productionData as SheetData, false, target);
+      }
+
+      console.log(`Printed first ${firstBatch} QR codes.`);
+      return firstBatch; // คืนค่าจำนวนที่พิมพ์แล้ว
+    };
 
   const generateQrCodeDataUrl = useCallback((data: SheetData): string => {
     const qrCodeData = JSON.stringify(data);
@@ -86,17 +123,89 @@ export default function ControlUserPanelPage({ productionData, qrCodeDataUrl, on
   }, []);
 
   // เพิ่ม printedCountRef เพื่อติดตามค่า printedCount ล่าสุด
-const printedCountRef = useRef(0);
+  const printedCountRef = useRef(0);
 
-const isSaving = useRef(false);
+  const isSaving = useRef(false);
 
-// เพิ่ม saveActionRef สำหรับป้องกันการ save ซ้ำ
-const saveActionRef = useRef(false);
-
-// เพิ่ม ref นี้ต่อจาก printedCountRef
+  // เพิ่ม ref นี้ต่อจาก printedCountRef
 const startTimeRef = useRef<Date | null>(null);
 
   // แก้ไขฟังก์ชัน handleStop เพื่อใช้ printedCountRef
+
+    // เพิ่มฟังก์ชันใหม่เพื่อบันทึกข้อมูลการผลิตโดยไม่ต้องขึ้นกับ handleStop
+const saveProductionData = useCallback(async () => {
+  if (!user || !startTime || isSaving.current) {
+    console.log('ไม่สามารถบันทึกได้');
+    return;
+  }
+
+  try {
+    isSaving.current = true;
+
+    // ใช้ค่าจาก ref เพื่อให้แน่ใจว่าเป็นค่าล่าสุด
+    const actualProduced = Math.max(printedCountRef.current, parseInt(currentCount) || 0, printedCount);
+
+    console.log(`กำลังบันทึกข้อมูลการผลิต: ${actualProduced} units produced`);
+
+    // สร้าง serial numbers ตามจำนวนที่ผลิตจริง
+    const serialNumbers = Array.from(
+      { length: actualProduced },
+      (_, i) => `${productionData?.Batch}-${i + 1}`
+    );
+
+    // บันทึกข้อมูลการผลิตลง database
+    const endTime = new Date();
+
+    const productionLogData: ProductionLogData = {
+      userId: user.id,
+      username: user.username,
+      date: new Date().toISOString().split('T')[0],
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      startCount: parseInt(startCount) || 0,
+      endCount: actualProduced,
+      totalProduced: actualProduced,
+      material: productionData?.Material || '',
+      batch: productionData?.Batch || '',
+      vendorBatch: productionData?.["Vendor Batch"] || '',
+      materialDescription: productionData?.["Material Description"] || '',
+      qrCodeData: JSON.stringify(productionData),
+      qrCodeImage: generateQrCodeDataUrl(productionData),
+      serialNumbers: serialNumbers,
+    };
+
+    // บันทึกข้อมูลการผลิต
+    const savedLog = await saveProductionLog(productionLogData);
+    console.log('Production log saved successfully:', savedLog);
+
+    // แสดงข้อมูลการผลิตในหน้า completion modal
+    setCompletionData({
+      totalProduced: actualProduced,
+      startTime: startTime,
+      endTime: endTime,
+      serialNumbers: serialNumbers
+    });
+
+    // แสดง modal สรุปการผลิต
+    setShowCompletionModal(true);
+
+    // รีเซ็ตค่าต่างๆ
+    setWaitingForArduinoResponse(false);
+    printedCountRef.current = 0;
+    setPrintedCount(0);
+    setCurrentCount('0');
+    setStopCount('0');
+
+    return true;
+  } catch (error) {
+    console.error('Error saving production data:', error);
+    return false;
+  } finally {
+    isSaving.current = false;
+  }
+}, [user, startTime, currentCount, startCount, productionData, generateQrCodeDataUrl, printedCount]);
+
+// แก้ไขฟังก์ชัน saveProductionDataWithRef
 
 const saveProductionDataWithRef = useCallback(async () => {
   if (!user) {
@@ -168,11 +277,8 @@ const saveProductionDataWithRef = useCallback(async () => {
       materialDescription: productionData?.["Material Description"] || '',
       qrCodeData: JSON.stringify(productionData),
       qrCodeImage: productionData ? generateQrCodeDataUrl(productionData) : '',
-      serialNumbersData: JSON.stringify(serialNumbers), // Convert array to string
+      serialNumbers: serialNumbers,
     };
-
-    // Add logging to see what data is being sent
-    console.log('Sending production log data:', productionLogData);
 
     // บันทึกข้อมูลการผลิต
     const savedLog = await saveProductionLog(productionLogData);
@@ -200,15 +306,6 @@ const saveProductionDataWithRef = useCallback(async () => {
     return true;
   } catch (error) {
     console.error('Error saving production data with ref:', error);
-
-    // Add more detailed error logging
-    if (error instanceof Response) {
-      const errorText = await error.text();
-      console.error('API error response:', errorText);
-    }
-
-    // Show error in UI
-    setError('บันทึกข้อมูลไม่สำเร็จ โปรดลองอีกครั้ง');
     return false;
   } finally {
     isSaving.current = false;
@@ -448,23 +545,15 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
                 // ใช้ค่าที่ส่งผ่านพารามิเตอร์โดยตรงแทนการอ่านจาก state
                 const effectiveTargetCount = currentTargetCount || targetCount;
                 console.log(`อัพเดตค่าเรียบร้อย (timeout) - ตอนนี้เป็น ${newCount}, เป้าหมาย ${effectiveTargetCount}`);
-                
-                console.log('Counter values:', { 
-                  newCount, 
-                  printedCount, 
-                  printedCountRef: printedCountRef.current,
-                  target: effectiveTargetCount 
-                });
 
                 // ตรวจสอบกับ targetCount ที่ส่งมาโดยตรง ไม่ใช่ค่าเริ่มต้น
-                if (!isBlank && printedCountRef.current >= effectiveTargetCount) {
+                if (!isBlank && newCount >= effectiveTargetCount) { // only check target for non-blank prints
                   console.log('ถึงเป้าหมายแล้ว จะหยุดการผลิต (timeout)');
-                  setIsStopRequested(true);  // Add this line to prevent more processing
                   handleStop(true);
-                } else if (!isBlank) {
-                  // Only set waiting status if we're not already at target count
-                  console.log(`ยังไม่ถึงเป้าหมาย (${printedCountRef.current}/${effectiveTargetCount}) - รอสัญญาณ Arduino สำหรับชิ้นถัดไป`);
-                  setWaitingForArduinoResponse(printedCountRef.current < effectiveTargetCount);
+                } else if (!isBlank) { // wait for arduino only for non-blank prints when target not met
+                  // ถ้ายังไม่ถึงเป้าหมาย ให้รอสัญญาณจาก Arduino
+                  console.log(`ยังไม่ถึงเป้าหมาย (${newCount}/${effectiveTargetCount}) - รอสัญญาณ Arduino สำหรับชิ้นถัดไป`);
+                  setWaitingForArduinoResponse(true);
                 }
 
                 resolve(true);
@@ -480,9 +569,12 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
               cleanup();
               const newPrintedCount = printedCount + 1;
               setPrintedCount(newPrintedCount);
-              // อัพเดต stopCount ทุกครั้งที่พิมพ์สำเร็จ
+              setRemainingPrints(prev => prev - 1);
 
-            console.log(`พิมพ์เสร็จสิ้น: ${newPrintedCount}/${targetCount}`);
+              // อัพเดต stopCount ทุกครั้งที่พิมพ์สำเร็จ
+              setStopCount(newPrintedCount.toString());
+
+              console.log(`พิมพ์เสร็จสิ้น: ${newPrintedCount}/${targetCount}`);
               resolve(true);
             });
 
@@ -492,13 +584,15 @@ const handleStop = useCallback(async (forceStop: boolean = false) => {
                 cleanup();
                 const newPrintedCount = printedCount + 1;
                 setPrintedCount(newPrintedCount);
+                setRemainingPrints(prev => prev - 1);
 
                 // อัพเดต stopCount ทุกครั้งที่พิมพ์สำเร็จ
                 setStopCount(newPrintedCount.toString());
+
                 console.log(`Print timeout - assuming completed: ${newPrintedCount}/${targetCount}`);
                 resolve(true);
               }
-            }, 200);
+            }, 1000);
           } else {
             cleanup();
             resolve(false);
@@ -571,10 +665,8 @@ useEffect(() => {
         setIsProcessing(true);
         setWaitingForArduinoResponse(false); // ยกเลิกการรอเพื่อป้องกันทริกเกอร์ซ้ำ
 
-        setWaitingForArduinoResponse(false); // ยกเลิกการรอเพื่อป้องกันทริกเกอร์ซ้ำ
-        
-        // Calculate nextItemNumber based on printedCount or printedCountRef
-        const nextItemNumber = printedCountRef.current + 1;
+        // ตรวจสอบอีกครั้งว่าเรายังไม่ถึงเป้าหมาย
+        const nextItemNumber = printedCount + 1;
         console.log(`กำลังพิมพ์ชิ้นที่ ${nextItemNumber}/${targetCount}`);
 
         // Generate QR code for next item
@@ -590,7 +682,7 @@ useEffect(() => {
         await handlePrintQR(qrImage, qrData as SheetData, false, targetCount);
 
         // เพิ่มดีเลย์เพื่อรอให้แน่ใจว่า state อัปเดตแล้ว
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // ตั้งค่ารอสัญญาณครั้งใหม่ ถ้ายังไม่ถึงเป้าหมาย
         if (printedCount < targetCount && !isStopRequested) {
@@ -605,7 +697,7 @@ useEffect(() => {
       }
     })();
   }
-}, [logs, waitingForArduinoResponse, targetCount, printedCountRef, printedCount, isStopRequested, productionData, generateQrCodeDataUrl, sendCommand, handlePrintQR, handleStop]);
+}, [logs, isRunning, targetCount, productionData, handleStop, sendCommand, generateQrCodeDataUrl, handlePrintQR, waitingForArduinoResponse, printedCount, isStopRequested]);
 
   const handleStartProduction = useCallback(async (inputTarget?: number) => {
     try {
@@ -615,49 +707,72 @@ useEffect(() => {
       const activeTarget = inputTarget || targetCount;
       console.log(`เริ่มการผลิตด้วยเป้าหมาย ${activeTarget} ชิ้น`);
 
-      // รีเซ็ตค่าตัวนับต่างๆ
       printedCountRef.current = 0;
-      setPrintedCount(0);
-      setCurrentCount('0');
-      setStopCount('0');
+      await Promise.all([
+        new Promise<void>(resolve => {
+          setPrintedCount(0);
+          setTimeout(resolve, 0);
+        }),
+        new Promise<void>(resolve => {
+          setCurrentCount('0');
+          setTimeout(resolve, 0);
+        }),
+        new Promise<void>(resolve => {
+          setStopCount('0');
+          setTimeout(resolve, 0);
+        })
+      ]);
 
-      // Wait for state updates to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // 1️⃣ พิมพ์ QR Code จริงก่อน
+      const printedCount = await printInitialQRCodes(activeTarget);
+      console.log(`จำนวนที่พิมพ์แล้ว: ${printedCount}`);
 
-      console.log("Starting production process...");
+      if (printedCount < activeTarget) {
+        console.log(`ต้องพิมพ์เพิ่มอีก ${activeTarget - printedCount} ชิ้น`);
+      }
 
-      // Instead of starting all operations at once, just start the first one
-      // and let the Arduino signal handler take care of the rest
-      if (activeTarget > 0) {
-        console.log(`Now producing 1/${activeTarget} - Sending 110`);
+
+      // 2️⃣ พิมพ์ QR เปล่า (10 ชิ้น) เพื่อเลื่อนสติกเกอร์ให้อยู่ด้านหน้า
+      const blankCount = Math.max(0, 20 - activeTarget);
+      console.log(`Printing ${blankCount} empty QR codes for positioning...`);
+      for (let i = 1; i <= blankCount; i++) {
+        console.log(`Printing empty QR ${i}/${blankCount}`);
+        await handlePrintQR('', {} as SheetData, true, activeTarget);
+      }
+
+      console.log("QR Code printing completed. Now starting production...");
+
+      // 3️⃣ เริ่มการผลิต
+      for (let i = 1; i <= activeTarget; i++) {
+        if (printedCountRef.current >= activeTarget) {
+          console.log(`✅ ผลิตครบ ${activeTarget} ชิ้นแล้ว หยุดส่งคำสั่ง 110`);
+          break;
+        }
+
+        console.log(`Now producing ${i}/${activeTarget} - Sending 110`);
         await sendCommand('110');
 
-        // Create and print QR code for the first item
-        const qrData = {
-          ...productionData,
-          serialNumber: `${productionData?.Batch}-1`,
-          timestamp: new Date().toISOString()
-        };
-        const qrImage = generateQrCodeDataUrl(qrData as SheetData);
-        
-        // Print QR code and wait for completion
-        await handlePrintQR(qrImage, qrData as SheetData, false, activeTarget);
-        
-        // Set waiting flag to wait for Arduino signal before continuing
-        if (activeTarget > 1) {
-          console.log(`รอสัญญาณจาก Arduino สำหรับชิ้นถัดไป`);
-          setWaitingForArduinoResponse(true);
-        } else {
-          // If only one item, we're done
-          console.log("✅ Production process completed. Stopping production...");
-          await handleStop(true);
+        // ✅ พิมพ์ QR เปล่า **เพิ่มอีก 5 ชิ้นระหว่างการผลิต**
+        if (i <= 5) {
+          console.log(`Printing empty QR during production: ${i}/5`);
+          await handlePrintQR('', {} as SheetData, true, activeTarget);
         }
+
+        // ✅ รอสัญญาณจาก Arduino ก่อนผลิตชิ้นถัดไป
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
+
+      console.log("✅ Production process completed. Stopping production...");
+      await handleStop(true);
+
     } catch (error) {
       console.error('Start production error:', error);
       setError('ไม่สามารถเริ่มการผลิตได้');
     }
-  }, [targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl, productionData, handleStop]);
+  }, [targetCount, sendCommand, handlePrintQR]);
+
+
+
 
   const handleStart = useCallback(() => {
     if (!productionData) {
@@ -680,46 +795,43 @@ useEffect(() => {
 
   const confirmStart = useCallback(async (target: number) => {
     console.log('เริ่มต้นการผลิตด้วยเป้าหมาย:', target);
-  
+
     if (isNaN(target) || target <= 0) {
       setError('กรุณาระบุจำนวนที่ต้องการผลิตให้ถูกต้อง');
       return;
     }
-  
+
     try {
       // รีเซ็ตค่าทุกครั้งก่อนเริ่มการผลิตใหม่
       printedCountRef.current = 0;
       setPrintedCount(0);
       setCurrentCount('0');
       setStopCount('0');
-      
-      // ส่งคำสั่งเริ่มต้นไปยัง Arduino
-      await sendCommand('100');
-  
+
       // สร้าง startTime ก่อนและเก็บไว้ในตัวแปร
       const newStartTime = new Date();
-  
+
       // ตั้งค่า startTimeRef และ startTime พร้อมกัน
       startTimeRef.current = newStartTime;
       setStartTime(newStartTime);
-  
+
       // ตั้งค่าเป้าหมายก่อน
       setTargetCount(target);
-  
+
       // รอให้ state อัพเดต
       await new Promise(resolve => setTimeout(resolve, 100));
-  
+
       // ตั้งค่า UI
       setShowTargetPrompt(false);
       setIsRunning(true);
       setStartCount('0'); // เริ่มที่ 0 เสมอ
-  
+
       // เพิ่มการล็อกเพื่อดีบั๊ก
       console.log(`กำลังเริ่มผลิตด้วยเป้าหมาย: ${target} ชิ้น, targetCount:`, target);
-  
+
       // รอให้ state อัพเดต
       await new Promise(resolve => setTimeout(resolve, 500));
-  
+
       // Log เพื่อตรวจสอบว่า startTime และ targetCount ถูกตั้งค่าไว้แล้ว
       console.log('ตรวจสอบค่าก่อนเริ่มผลิต:', {
         startTime: startTime,
@@ -727,10 +839,10 @@ useEffect(() => {
         targetCount: targetCount,
         target: target
       });
-  
-      // เริ่มการผลิตด้วยการส่งค่า target โดยตรง - ไม่มีการพิมพ์ QR เปล่า
+
+      // เริ่มการผลิตด้วยการส่งค่า target โดยตรง
       await handleStartProduction(target);
-  
+
     } catch (error) {
       console.error('Error starting production:', error);
       setError('ไม่สามารถเริ่มการผลิตได้');
@@ -772,8 +884,11 @@ useEffect(() => {
 
 // เพิ่ม useEffect สำหรับติดตาม isRunning เพื่อบันทึกข้อมูล
 // ใช้ ref เพื่อป้องกันการทำงานซ้ำในรอบเดียวกัน
-// saveActionRef ถูกประกาศก่อนหน้านี้แล้วในโค้ด
+const saveActionRef = useRef(false);
+
 // Update the useEffect that tracks isRunning and prevents duplicate saves
+
+// Update the useEffect that tracks isRunning
 
 useEffect(() => {
   console.log(`สถานะการทำงาน: ${isRunning ? 'กำลังทำงาน' : 'หยุดทำงาน'}`);
