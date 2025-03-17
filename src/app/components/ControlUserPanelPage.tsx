@@ -779,25 +779,54 @@ const handleStartProduction = useCallback(async (inputTarget?: number) => {
       console.log(`กำลังเริ่มผลิตชิ้นที่เหลืออีก ${remainingItems} ชิ้น...`);
 
       // 🆕 ส่งคำสั่ง 100 ให้ Arduino และรอสัญญาณ 2 กลับมา
-      console.log('กำลังส่งคำสั่ง 100 ให้ Arduino เพื่อเริ่มการผลิต');
-      await sendCommand('100');
-      
-      // รอให้ Arduino ส่งสัญญาณ 2 กลับมา
-      console.log('กำลังรอ Arduino ส่งสัญญาณ 2 กลับมา...');
+    console.log('กำลังส่งคำสั่ง 100 ให้ Arduino เพื่อเริ่มการผลิต');
+    await sendCommand('100');
+
+    // รอให้ Arduino ส่งสัญญาณ 2 กลับมา
+    console.log('กำลังรอ Arduino ส่งสัญญาณ 2 กลับมา...');
+
+    // First check if signal "2" already exists in the logs
+    let signal2Found = false;
+    // Look through last 10 logs to see if we already received "2"
+    const recentLogs = logs.slice(-10);
+    for (const log of recentLogs) {
+      if (log.type === 'received' && log.message === '2') {
+        console.log('พบสัญญาณ 2 จาก Arduino ในประวัติล่าสุด - เริ่มการผลิต');
+        signal2Found = true;
+        break;
+      }
+    }
+
+    // If not found in existing logs, wait for it
+    if (!signal2Found) {
+      // Get current logs length to check only new logs
+      const currentLogsLength = logs.length;
       
       // Create a promise that resolves when Arduino sends "2"
-      const waitFor2Signal = new Promise<void>(resolve => {
+      const waitFor2Signal = new Promise<void>((resolve) => {
+        // Add a timeout
+        const timeoutId = setTimeout(() => {
+          console.log('หมดเวลารอสัญญาณ 2 - เริ่มการผลิตต่อ');
+          resolve(); // Continue even if timeout
+        }, 10000); // 10 seconds timeout
+        
         const checkForSignal = () => {
-          // Check the latest log
-          const latestLog = logs.length > 0 ? logs[logs.length - 1] : null;
-          
-          if (latestLog?.type === 'received' && latestLog.message === '2') {
-            console.log('ได้รับสัญญาณ 2 จาก Arduino - เริ่มการผลิต');
-            resolve();
-          } else {
-            // Check again after a small delay
-            setTimeout(checkForSignal, 100);
+          // Check if any new logs came in
+          if (logs.length > currentLogsLength) {
+            // Check all new logs since we started waiting
+            for (let i = currentLogsLength; i < logs.length; i++) {
+              const log = logs[i];
+              if (log.type === 'received' && log.message === '2') {
+                console.log('ได้รับสัญญาณ 2 จาก Arduino - เริ่มการผลิต');
+                clearTimeout(timeoutId);
+                resolve();
+                return;
+              }
+            }
           }
+          
+          // Check again after a small delay
+          setTimeout(checkForSignal, 100);
         };
         
         // Start checking
@@ -806,6 +835,7 @@ const handleStartProduction = useCallback(async (inputTarget?: number) => {
       
       // Wait for the "2" signal
       await waitFor2Signal;
+      }
       
       // 2️⃣ ส่งคำสั่ง 110 สำหรับการผลิตส่วนที่เหลือ
       for (let i = 1; i <= remainingItems; i++) {
