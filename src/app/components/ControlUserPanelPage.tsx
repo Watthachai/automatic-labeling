@@ -699,6 +699,7 @@ useEffect(() => {
   }
 }, [logs, isRunning, targetCount, productionData, handleStop, sendCommand, generateQrCodeDataUrl, handlePrintQR, waitingForArduinoResponse, printedCount, isStopRequested]);
 
+// Replace the handleStartProduction function with this modified version
 const handleStartProduction = useCallback(async (inputTarget?: number) => {
   try {
     setIsStopRequested(false);
@@ -777,6 +778,35 @@ const handleStartProduction = useCallback(async (inputTarget?: number) => {
     if (remainingItems > 0) {
       console.log(`กำลังเริ่มผลิตชิ้นที่เหลืออีก ${remainingItems} ชิ้น...`);
 
+      // 🆕 ส่งคำสั่ง 100 ให้ Arduino และรอสัญญาณ 2 กลับมา
+      console.log('กำลังส่งคำสั่ง 100 ให้ Arduino เพื่อเริ่มการผลิต');
+      await sendCommand('100');
+      
+      // รอให้ Arduino ส่งสัญญาณ 2 กลับมา
+      console.log('กำลังรอ Arduino ส่งสัญญาณ 2 กลับมา...');
+      
+      // Create a promise that resolves when Arduino sends "2"
+      const waitFor2Signal = new Promise<void>(resolve => {
+        const checkForSignal = () => {
+          // Check the latest log
+          const latestLog = logs.length > 0 ? logs[logs.length - 1] : null;
+          
+          if (latestLog?.type === 'received' && latestLog.message === '2') {
+            console.log('ได้รับสัญญาณ 2 จาก Arduino - เริ่มการผลิต');
+            resolve();
+          } else {
+            // Check again after a small delay
+            setTimeout(checkForSignal, 100);
+          }
+        };
+        
+        // Start checking
+        checkForSignal();
+      });
+      
+      // Wait for the "2" signal
+      await waitFor2Signal;
+      
       // 2️⃣ ส่งคำสั่ง 110 สำหรับการผลิตส่วนที่เหลือ
       for (let i = 1; i <= remainingItems; i++) {
         // ตรวจสอบว่าถึงเป้าหมายหรือมีการขอหยุดหรือไม่
@@ -819,7 +849,8 @@ const handleStartProduction = useCallback(async (inputTarget?: number) => {
     setError('ไม่สามารถเริ่มการผลิตได้');
     setIsRunning(false);
   }
-}, [targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl, productionData, isStopRequested, waitingForArduinoResponse, handleStop]);
+}, [targetCount, sendCommand, handlePrintQR, generateQrCodeDataUrl, productionData, isStopRequested, waitingForArduinoResponse, handleStop, logs]);
+
 
   const handleStart = useCallback(() => {
     if (!productionData) {
