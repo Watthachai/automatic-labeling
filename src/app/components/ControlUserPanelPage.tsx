@@ -104,7 +104,7 @@ export default function ControlUserPanelPage({
   const [waitingForSignal2, setWaitingForSignal2] = useState(false);
 
   // ฟังก์ชันสำหรับตรวจจับสัญญาณ "2" จาก Arduino - ปรับปรุงจากตัวอย่างโค้ดที่ทำงานได้
-  /* useEffect(() => {
+   useEffect(() => {
     if (waitingForSignal2) {
       const lastLog = logs[logs.length - 1];
       if (lastLog?.type === "received") {
@@ -122,7 +122,7 @@ export default function ControlUserPanelPage({
         }
       }
     }
-  }, [logs, waitingForSignal2]); */
+  }, [logs, waitingForSignal2]);
 
   const printInitialQRCodes = async (target: number) => {
     const firstBatch = Math.min(target, 15);
@@ -872,8 +872,8 @@ const handleStartProduction = useCallback(
           `กำลังเริ่มผลิตชิ้นที่เหลืออีก ${remainingItems} ชิ้น...`
         );
 
-        // ล้าง waitingForSignal2 และเตรียมพร้อมสำหรับการส่งคำสั่ง 100
-        setWaitingForSignal2(false);
+        // ตั้งค่าสถานะการรอสัญญาณ 2 เป็น true เพื่อให้ useEffect ทำงาน
+        setWaitingForSignal2(true);
         
         // ส่งคำสั่ง 100 ไปยัง Arduino
         console.log("ส่งคำสั่ง 100 ไปยัง Arduino");
@@ -881,66 +881,33 @@ const handleStartProduction = useCallback(
         
         console.log("รอสัญญาณ 2 จาก Arduino...");
         
-        // รอให้ระบบประมวลผลและเตรียมพร้อม
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // รอให้ useEffect ตรวจจับสัญญาณ "2" จาก logs
+        // สังเกตว่าเราไม่ต้องใช้โค้ดตรวจจับที่ซับซ้อนที่นี่อีกต่อไป
+        // เพราะเรามี useEffect คอยตรวจจับแล้ว
         
-        // แก้ไขส่วนที่ตรวจสอบสัญญาณ "2" จาก Arduino
-const signal2Received = await new Promise<boolean>((resolve) => {
-  console.log("เริ่มตรวจสอบสัญญาณ 2...");
-  
-  // ตัวแปรสำหรับเช็คว่าพบสัญญาณ 2 หรือยัง
-  let found2Signal = false;
-  
-  // เก็บตำแหน่งในลอกอาร์เรย์ที่ตรวจสอบล่าสุด
-  let lastCheckedLogIndex = logs.length - 1;
-  
-  // ฟังก์ชันสำหรับตรวจสอบข้อความใหม่
-  const checkForSignal2 = () => {
-    // ดูว่ามีข้อความใหม่เข้ามาหรือไม่
-    if (logs.length > lastCheckedLogIndex) {
-      // ตรวจสอบข้อความใหม่ทีละข้อความ
-      for (let i = lastCheckedLogIndex + 1; i < logs.length; i++) {
-        const log = logs[i];
-        
-        if (log.type === "received") {
-          console.log(`ตรวจสอบข้อความที่ ${i}: '${log.message}'`);
+        // รอจนกว่า waitingForSignal2 จะกลับเป็น false (หมายถึงพบสัญญาณ "2" แล้ว)
+        await new Promise<void>((resolve) => {
+          const checkSignalState = () => {
+            if (!waitingForSignal2) {
+              // พบสัญญาณ "2" แล้ว
+              console.log("✅ ตรวจพบสัญญาณ 2 ผ่าน useEffect");
+              resolve();
+            } else if (isStopRequested) {
+              // มีการขอหยุด
+              console.log("❌ มีการขอหยุดระหว่างรอสัญญาณ 2");
+              resolve();
+            } else {
+              // ยังไม่พบ ตรวจสอบอีกครั้งในอีก 100ms
+              setTimeout(checkSignalState, 100);
+            }
+          };
           
-          // แยกข้อความเป็นบรรทัด
-          const lines = log.message.split(/\r?\n/);
-          
-          // ตรวจสอบทั้งข้อความและบรรทัดแรก
-          if (
-            log.message === "2" || 
-            log.message.trim() === "2" || 
-            lines[0]?.trim() === "2"
-          ) {
-            console.log("✅ ตรวจพบสัญญาณ 2 ในข้อความ:", log.message);
-            found2Signal = true;
-            resolve(true);
-            return;
-          }
-        }
-      }
-      
-      // อัพเดตตำแหน่งที่ตรวจสอบล่าสุด
-      lastCheckedLogIndex = logs.length - 1;
-    }
-    
-    // ถ้ายังไม่พบสัญญาณและไม่มีการขอหยุด ตรวจสอบต่อไป
-    if (!found2Signal && !isStopRequested) {
-      setTimeout(checkForSignal2, 100);
-    } else if (isStopRequested) {
-      console.log("❌ มีการขอหยุดระหว่างรอสัญญาณ 2");
-      resolve(false);
-    }
-  };
-  
-  // เริ่มตรวจสอบ
-  checkForSignal2();
-});
+          // เริ่มตรวจสอบ
+          checkSignalState();
+        });
         
-        // หากได้รับสัญญาณ "2" หรือหมดเวลารอแล้ว และไม่มีการขอหยุด ดำเนินการต่อ
-        if (signal2Received && !isStopRequested) {
+        // หากไม่มีการขอหยุด ดำเนินการต่อ
+        if (!isStopRequested) {
           console.log("✅ เริ่มส่งคำสั่งผลิต 110");
           
           // รอเพิ่มอีกเล็กน้อยเพื่อให้แน่ใจว่า Arduino พร้อม
