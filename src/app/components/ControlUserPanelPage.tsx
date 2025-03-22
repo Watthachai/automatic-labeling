@@ -105,42 +105,41 @@ export default function ControlUserPanelPage({
 
   // ฟังก์ชันสำหรับตรวจจับสัญญาณ "2" จาก Arduino - ปรับปรุงจากตัวอย่างโค้ดที่ทำงานได้
    // แก้ไขฟังก์ชัน useEffect สำหรับตรวจจับสัญญาณ "2"
-useEffect(() => {
-  if (waitingForSignal2) {
-    // ถ้ามีการเปลี่ยนแปลงของ logs
-    const lastLog = logs[logs.length - 1];
-    
-    // แสดงข้อมูลเพื่อดีบักทุกครั้งที่มีการเปลี่ยนแปลง logs
-    console.log(`[DEBUG SIGNAL2] ตรวจสอบ log ล่าสุด:`, {
-      waitingForSignal2,
-      logExists: !!lastLog,
-      logType: lastLog?.type,
-      message: lastLog?.message,
-      fullLogs: logs
-    });
-    
-    if (lastLog?.type === "received") {
-      // ล้างค่าข้อความทั้งหมด (ตัด whitespace)
-      const trimmedMessage = lastLog.message.trim();
+   useEffect(() => {
+    if (waitingForSignal2) {
+      // ถ้ามีการเปลี่ยนแปลงของ logs
+      const lastLog = logs[logs.length - 1];
       
-      console.log(`[DEBUG SIGNAL2] ตรวจสอบข้อความ: '${trimmedMessage}' (length: ${trimmedMessage.length})`);
-      console.log(`[DEBUG SIGNAL2] ตรวจสอบว่าเป็น "2" หรือไม่: ${trimmedMessage === "2"}`);
+      // แสดงข้อมูลเพื่อดีบักทุกครั้งที่มีการเปลี่ยนแปลง logs
+      console.log(`[DEBUG SIGNAL2] ตรวจสอบ log ล่าสุด:`, {
+        waitingForSignal2,
+        logExists: !!lastLog,
+        logType: lastLog?.type,
+        message: lastLog?.message,
+        fullLogs: logs.slice(-3) // แสดงเฉพาะ 3 logs ล่าสุดเพื่อไม่ให้ข้อมูลเยอะเกินไป
+      });
       
-      // เพิ่มการเช็คเป็นตัวเลข (ในกรณีที่อาจจะมาเป็นตัวเลข)
-      const isNumber2 = trimmedMessage === "2" || parseInt(trimmedMessage) === 2;
-      console.log(`[DEBUG SIGNAL2] ตรวจสอบว่าเป็นตัวเลข 2 หรือไม่: ${isNumber2}`);
-      
-      // ตรวจสอบเฉพาะเมื่อข้อความเป็น "2" เท่านั้น (หรือในรูปแบบตัวเลข 2)
-      if (isNumber2) {
-        console.log("✅ [DEBUG SIGNAL2] พบสัญญาณ '2' จาก Arduino!");
-        setWaitingForSignal2(false);
-        setWaitingForArduinoResponse(true); // พร้อมสำหรับขั้นตอนถัดไป
-      } else {
-        console.log("❌ [DEBUG SIGNAL2] ข้อความไม่ตรงกับรูปแบบ '2' ที่ต้องการ");
+      if (lastLog?.type === "received") {
+        // ล้างค่าข้อความทั้งหมด (ตัด whitespace)
+        const trimmedMessage = lastLog.message.trim();
+        
+        console.log(`[DEBUG SIGNAL2] ตรวจสอบข้อความ: '${trimmedMessage}' (length: ${trimmedMessage.length})`);
+        
+        // ตรวจสอบว่าเป็นเลข 2 แบบแม่นยำ - เป็นข้อความ "2" เท่านั้น
+        const isExactly2 = trimmedMessage === "2";
+        console.log(`[DEBUG SIGNAL2] ตรวจสอบว่าเป็น "2" ทั้งข้อความ: ${isExactly2}`);
+        
+        // ตรวจสอบเฉพาะเมื่อข้อความเป็น "2" เท่านั้น (ไม่ใช่ส่วนหนึ่งของข้อความอื่น)
+        if (isExactly2) {
+          console.log("✅ [DEBUG SIGNAL2] พบสัญญาณ '2' จาก Arduino!");
+          setWaitingForSignal2(false);
+          setWaitingForArduinoResponse(true); // พร้อมสำหรับขั้นตอนถัดไป
+        } else {
+          console.log("❌ [DEBUG SIGNAL2] ข้อความไม่ใช่ '2' ที่ต้องการ (พบส่วนหนึ่งของข้อความต้อนรับ)");
+        }
       }
     }
-  }
-}, [logs, waitingForSignal2]);
+  }, [logs, waitingForSignal2]);
 
   const printInitialQRCodes = async (target: number) => {
     const firstBatch = Math.min(target, 15);
