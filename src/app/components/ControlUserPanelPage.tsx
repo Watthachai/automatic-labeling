@@ -909,7 +909,7 @@ await new Promise<void>((resolve) => {
   
   // เพิ่มการตรวจสอบหมดเวลา
   const startTime = Date.now();
-  const MAX_WAIT_TIME = 50000; // รอไม่เกิน 50 วินาที
+  const MAX_WAIT_TIME = 20000; // รอไม่เกิน 50 วินาที
   
   // สร้างฟังก์ชันตรวจสอบ logs ใหม่
   const checkNewLogs = () => {
