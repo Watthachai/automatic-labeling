@@ -892,48 +892,88 @@ const handleStartProduction = useCallback(
         // ตั้งค่าให้รอสัญญาณ 2 ก่อน
         setWaitingForSignal2(true);
         
-        // ส่งคำสั่ง 100 ไปยัง Arduino
-        console.log("ส่งคำสั่ง 100 ไปยัง Arduino");
-        await sendCommand("100");
+        // แก้ไขการรอสัญญาณ "2" ในฟังก์ชัน handleStartProduction
+
+// เช็ค log ใหม่ที่เข้ามาโดยตรงแทนการใช้ waitingForSignal2 state
+console.log("ส่งคำสั่ง 100 ไปยัง Arduino และเริ่มรอสัญญาณ 2...");
+await sendCommand("100");
+
+// บันทึกจำนวน logs ปัจจุบันก่อนเริ่มรอ
+const currentLogsLength = logs.length;
+
+// รอสัญญาณ "2" จาก Arduino โดยตรง
+let signal2Received = false;
+
+await new Promise<void>((resolve) => {
+  console.log("เริ่มรอสัญญาณ 2 จาก Arduino แบบ realtime...");
+  
+  // เพิ่มการตรวจสอบหมดเวลา
+  const startTime = Date.now();
+  const MAX_WAIT_TIME = 50000; // รอไม่เกิน 50 วินาที
+  
+  // สร้างฟังก์ชันตรวจสอบ logs ใหม่
+  const checkNewLogs = () => {
+    // คำนวณระยะเวลาที่รอไปแล้ว
+    const elapsedTime = Date.now() - startTime;
+    
+    // ตรวจสอบว่ามี logs ใหม่เข้ามาหรือไม่
+    if (logs.length > currentLogsLength) {
+      console.log(`พบ logs ใหม่จำนวน ${logs.length - currentLogsLength} รายการ`);
+      
+      // ตรวจสอบเฉพาะ logs ใหม่
+      for (let i = currentLogsLength; i < logs.length; i++) {
+        const log = logs[i];
         
-        console.log("รอสัญญาณ 2 จาก Arduino แบบ useEffect...");
-        
-        // รอจนกว่า useEffect จะทำให้ waitingForSignal2 เป็น false
-        let signal2Received = false;
-        
-        // รอสัญญาณ "2" ผ่าน useEffect (ใช้ Promise เพื่อรอ)
-        await new Promise<void>((resolve) => {
-          console.log("เริ่มรอสัญญาณ 2 จาก useEffect...");
+        if (log.type === "received") {
+          console.log(`[CHECKING] ตรวจสอบข้อความ: '${log.message}'`);
           
-          // สร้างฟังก์ชันตรวจสอบสถานะ waitingForSignal2 เป็นระยะ
-          const checkSignal = () => {
-            console.log(`ตรวจสอบ waitingForSignal2: ${waitingForSignal2}, isStopRequested: ${isStopRequested}`);
-            
-            if (!waitingForSignal2) {
-              // พบสัญญาณ "2" แล้ว โดย useEffect เปลี่ยนค่า waitingForSignal2 เป็น false
-              console.log("✅ ตรวจพบว่า waitingForSignal2 เป็น false แล้ว - useEffect น่าจะได้รับสัญญาณ 2");
-              signal2Received = true;
-              resolve();
-            } else if (isStopRequested) {
-              // มีการขอหยุด
-              console.log("❌ มีการขอหยุดระหว่างรอสัญญาณ 2");
-              resolve();
-            } else {
-              // ยังไม่พบและไม่มีการขอหยุด ตรวจสอบอีกครั้งใน 200ms
-              setTimeout(checkSignal, 200);
-            }
-          };
-          
-          // เริ่มตรวจสอบ
-          checkSignal();
-        });
-        
-        // หากไม่มีการขอหยุดและได้รับสัญญาณ 2 แล้ว จึงดำเนินการต่อ
-        if (!isStopRequested && signal2Received) {
-          console.log("✅ เริ่มส่งคำสั่งผลิต 110");
-          
-          // รอเพิ่มอีกเล็กน้อยเพื่อให้แน่ใจว่า Arduino พร้อม
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // ตรวจสอบว่ามีข้อความเป็น "2" หรือไม่
+          if (log.message.trim() === "2") {
+            console.log("✅ พบสัญญาณ '2' จาก Arduino!");
+            signal2Received = true;
+            resolve();
+            return;
+          }
+        }
+      }
+    }
+    
+    // ตรวจสอบเงื่อนไขการหยุดรอ
+    if (isStopRequested) {
+      console.log("❌ มีการขอหยุดระหว่างรอสัญญาณ 2");
+      resolve();
+      return;
+    }
+    
+    // ตรวจสอบหมดเวลา
+    if (elapsedTime > MAX_WAIT_TIME) {
+      console.log(`⏱️ รอสัญญาณ 2 เกินเวลาที่กำหนด (${MAX_WAIT_TIME/1000} วินาที)`);
+      console.log("⚠️ ข้ามการรอสัญญาณโดยอัตโนมัติ");
+      
+      // เพิ่มปุ่มข้ามการรอสัญญาณ
+      signal2Received = true; // ให้ดำเนินการต่อแม้ไม่ได้รับสัญญาณ
+      resolve();
+      return;
+    }
+    
+    // ตรวจสอบอีกครั้งหลังจากรอสักครู่
+    setTimeout(checkNewLogs, 100);
+  };
+  
+  // เริ่มตรวจสอบ
+  checkNewLogs();
+});
+
+// ไม่จำเป็นต้องใช้ waitingForSignal2 state อีกต่อไป
+// เราอาศัยตัวแปร signal2Received แทน
+
+// หากไม่มีการขอหยุดและได้รับสัญญาณ 2 แล้ว จึงดำเนินการต่อ
+if (!isStopRequested && signal2Received) {
+  console.log("✅ เริ่มส่งคำสั่งผลิต 110");
+  
+  // รอเพิ่มอีกเล็กน้อยเพื่อให้แน่ใจว่า Arduino พร้อม
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
           
           // ส่วนที่เหลือของฟังก์ชัน...
           for (let i = 1; i <= remainingItems; i++) {
