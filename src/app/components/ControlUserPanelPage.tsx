@@ -782,7 +782,7 @@ export default function ControlUserPanelPage({
     isStopRequested,
   ]);
 
-// แก้ไขฟังก์ชัน handleStartProduction โดยเพิ่มการรอที่ชัดเจนมากขึ้น
+// แก้ไขฟังก์ชัน handleStartProduction 
 const handleStartProduction = useCallback(
   async (inputTarget?: number) => {
     try {
@@ -871,42 +871,47 @@ const handleStartProduction = useCallback(
           `กำลังเริ่มผลิตชิ้นที่เหลืออีก ${remainingItems} ชิ้น...`
         );
 
-        // ตั้งค่าสถานะการรอสัญญาณ 2 เป็น true เพื่อให้ useEffect ทำงาน
+        // ตั้งค่าให้รอสัญญาณ 2 ก่อน
         setWaitingForSignal2(true);
         
         // ส่งคำสั่ง 100 ไปยัง Arduino
         console.log("ส่งคำสั่ง 100 ไปยัง Arduino");
         await sendCommand("100");
         
-        console.log("รอสัญญาณ 2 จาก Arduino...");
+        console.log("รอสัญญาณ 2 จาก Arduino แบบ useEffect...");
         
-        // รอให้ useEffect ตรวจจับสัญญาณ "2" จาก logs
-        // สังเกตว่าเราไม่ต้องใช้โค้ดตรวจจับที่ซับซ้อนที่นี่อีกต่อไป
-        // เพราะเรามี useEffect คอยตรวจจับแล้ว
+        // รอจนกว่า useEffect จะทำให้ waitingForSignal2 เป็น false
+        let signal2Received = false;
         
-        // รอจนกว่า waitingForSignal2 จะกลับเป็น false (หมายถึงพบสัญญาณ "2" แล้ว)
+        // รอสัญญาณ "2" ผ่าน useEffect (ใช้ Promise เพื่อรอ)
         await new Promise<void>((resolve) => {
-          const checkSignalState = () => {
+          console.log("เริ่มรอสัญญาณ 2 จาก useEffect...");
+          
+          // สร้างฟังก์ชันตรวจสอบสถานะ waitingForSignal2 เป็นระยะ
+          const checkSignal = () => {
+            console.log(`ตรวจสอบ waitingForSignal2: ${waitingForSignal2}, isStopRequested: ${isStopRequested}`);
+            
             if (!waitingForSignal2) {
-              // พบสัญญาณ "2" แล้ว
-              console.log("✅ ตรวจพบสัญญาณ 2 ผ่าน useEffect");
+              // พบสัญญาณ "2" แล้ว โดย useEffect เปลี่ยนค่า waitingForSignal2 เป็น false
+              console.log("✅ ตรวจพบว่า waitingForSignal2 เป็น false แล้ว - useEffect น่าจะได้รับสัญญาณ 2");
+              signal2Received = true;
               resolve();
             } else if (isStopRequested) {
               // มีการขอหยุด
               console.log("❌ มีการขอหยุดระหว่างรอสัญญาณ 2");
               resolve();
             } else {
-              // ยังไม่พบ ตรวจสอบอีกครั้งในอีก 100ms
-              setTimeout(checkSignalState, 100);
+              // ยังไม่พบและไม่มีการขอหยุด ตรวจสอบอีกครั้งใน 200ms
+              setTimeout(checkSignal, 200);
             }
           };
           
           // เริ่มตรวจสอบ
-          checkSignalState();
+          checkSignal();
         });
         
-        // หากไม่มีการขอหยุด ดำเนินการต่อ
-        if (!isStopRequested) {
+        // หากไม่มีการขอหยุดและได้รับสัญญาณ 2 แล้ว จึงดำเนินการต่อ
+        if (!isStopRequested && signal2Received) {
           console.log("✅ เริ่มส่งคำสั่งผลิต 110");
           
           // รอเพิ่มอีกเล็กน้อยเพื่อให้แน่ใจว่า Arduino พร้อม
