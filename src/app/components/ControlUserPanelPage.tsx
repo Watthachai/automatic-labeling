@@ -881,51 +881,63 @@ const handleStartProduction = useCallback(
         
         console.log("รอสัญญาณ 2 จาก Arduino...");
         
-        // เก็บสถานะล่าสุดของ logs เพื่อตรวจสอบเฉพาะข้อความใหม่
-        const logsBeforeCommand = logs.length;
-        
         // รอให้ระบบประมวลผลและเตรียมพร้อม
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // รอจนกว่าจะได้รับสัญญาณ "2" จาก Arduino
-        const signal2Received = await new Promise<boolean>((resolve) => {
-          console.log("เริ่มตรวจสอบสัญญาณ 2...");
+        // แก้ไขส่วนที่ตรวจสอบสัญญาณ "2" จาก Arduino
+const signal2Received = await new Promise<boolean>((resolve) => {
+  console.log("เริ่มตรวจสอบสัญญาณ 2...");
+  
+  // ตัวแปรสำหรับเช็คว่าพบสัญญาณ 2 หรือยัง
+  let found2Signal = false;
+  
+  // เก็บตำแหน่งในลอกอาร์เรย์ที่ตรวจสอบล่าสุด
+  let lastCheckedLogIndex = logs.length - 1;
+  
+  // ฟังก์ชันสำหรับตรวจสอบข้อความใหม่
+  const checkForSignal2 = () => {
+    // ดูว่ามีข้อความใหม่เข้ามาหรือไม่
+    if (logs.length > lastCheckedLogIndex) {
+      // ตรวจสอบข้อความใหม่ทีละข้อความ
+      for (let i = lastCheckedLogIndex + 1; i < logs.length; i++) {
+        const log = logs[i];
+        
+        if (log.type === "received") {
+          console.log(`ตรวจสอบข้อความที่ ${i}: '${log.message}'`);
           
-          // ตัวแปรสำหรับเช็คว่าพบสัญญาณ 2 หรือยัง
-          let found2Signal = false;
+          // แยกข้อความเป็นบรรทัด
+          const lines = log.message.split(/\r?\n/);
           
-          // ฟังก์ชันสำหรับตรวจสอบข้อความใหม่
-          const checkForSignal2 = () => {
-            // ตรวจสอบเฉพาะข้อความใหม่
-              // ตรวจสอบเฉพาะข้อความล่าสุด (optimized)
-              const lastLog = logs[logs.length - 1];
-              
-              if (lastLog.type === "received") {
-                // ตรวจสอบแบบแม่นยำมากขึ้น - ต้องเป็น "2" แบบเดี่ยวๆ หรือเป็นบรรทัดแรก
-                if (
-                  lastLog.message === "2" || 
-                  lastLog.message.trim() === "2" ||
-                  lastLog.message.includes("2")
-                ) {
-                  console.log("✅ ตรวจพบสัญญาณ 2 ในข้อความ:", lastLog.message);
-                  found2Signal = true;
-                  resolve(true);
-                  return;
-                }
-              }
-            }
-            
-            // ถ้ายังไม่พบสัญญาณและไม่มีการขอหยุด ตรวจสอบต่อไป
-            if (!found2Signal && !isStopRequested) {
-              setTimeout(checkForSignal2, 100);
-            } else if (isStopRequested) {
-              console.log("❌ มีการขอหยุดระหว่างรอสัญญาณ 2");
-              resolve(false);
-            }
-                      
-          // เริ่มตรวจสอบ
-          checkForSignal2();
-        });
+          // ตรวจสอบทั้งข้อความและบรรทัดแรก
+          if (
+            log.message === "2" || 
+            log.message.trim() === "2" || 
+            lines[0]?.trim() === "2"
+          ) {
+            console.log("✅ ตรวจพบสัญญาณ 2 ในข้อความ:", log.message);
+            found2Signal = true;
+            resolve(true);
+            return;
+          }
+        }
+      }
+      
+      // อัพเดตตำแหน่งที่ตรวจสอบล่าสุด
+      lastCheckedLogIndex = logs.length - 1;
+    }
+    
+    // ถ้ายังไม่พบสัญญาณและไม่มีการขอหยุด ตรวจสอบต่อไป
+    if (!found2Signal && !isStopRequested) {
+      setTimeout(checkForSignal2, 100);
+    } else if (isStopRequested) {
+      console.log("❌ มีการขอหยุดระหว่างรอสัญญาณ 2");
+      resolve(false);
+    }
+  };
+  
+  // เริ่มตรวจสอบ
+  checkForSignal2();
+});
         
         // หากได้รับสัญญาณ "2" หรือหมดเวลารอแล้ว และไม่มีการขอหยุด ดำเนินการต่อ
         if (signal2Received && !isStopRequested) {
