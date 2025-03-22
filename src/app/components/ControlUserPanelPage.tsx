@@ -898,13 +898,21 @@ const handleStartProduction = useCallback(
           const checkForSignal2 = () => {
             // ตรวจสอบเฉพาะข้อความใหม่
             if (logs.length > logsBeforeCommand) {
-              for (let i = logsBeforeCommand; i < logs.length; i++) {
-                const log = logs[i];
-                if (log.type === "received" && 
-                   (log.message === "2" || 
-                    log.message.trim() === "2" || 
-                    log.message.includes("2"))) {
-                  console.log("✅ ตรวจพบสัญญาณ 2 ในข้อความ:", log.message);
+              // ตรวจสอบเฉพาะข้อความล่าสุด (optimized)
+              const lastLog = logs[logs.length - 1];
+              
+              if (lastLog.type === "received") {
+                // แยกข้อความเป็นบรรทัด
+                const lines = lastLog.message.split(/\r?\n/);
+                const firstLine = lines[0].trim();
+                
+                // ตรวจสอบแบบแม่นยำมากขึ้น - ต้องเป็น "2" แบบเดี่ยวๆ หรือเป็นบรรทัดแรก
+                if (
+                  lastLog.message === "2" || 
+                  lastLog.message.trim() === "2" || 
+                  firstLine === "2"
+                ) {
+                  console.log("✅ ตรวจพบสัญญาณ 2 ในข้อความ:", lastLog.message);
                   found2Signal = true;
                   resolve(true);
                   return;
@@ -923,7 +931,6 @@ const handleStartProduction = useCallback(
           
           // เริ่มตรวจสอบ
           checkForSignal2();
-          
         });
         
         // หากได้รับสัญญาณ "2" หรือหมดเวลารอแล้ว และไม่มีการขอหยุด ดำเนินการต่อ
