@@ -110,11 +110,10 @@ export default function ControlUserPanelPage({
       if (lastLog?.type === "received") {
         console.log(`ตรวจสอบข้อความ: '${lastLog.message}'`);
         
+        const trimmedMessage = lastLog.message.trim();
         // ตรวจสอบรูปแบบต่างๆ ของข้อความ "2"
         if (
-          lastLog.message === "2" || 
-          lastLog.message.trim() === "2" ||
-          lastLog.message.includes("2")
+            trimmedMessage === "2"
         ) {
           console.log("✅ พบสัญญาณ '2' จาก Arduino!");
           setWaitingForSignal2(false);
