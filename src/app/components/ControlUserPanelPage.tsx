@@ -124,26 +124,6 @@ export default function ControlUserPanelPage({
     }
   }, [logs, waitingForSignal2]);
 
-  // แก้ไข useEffect สำหรับตรวจจับสัญญาณ "2" ให้มีประสิทธิภาพมากขึ้น
-  useEffect(() => {
-    if (!waitingForSignal2) return;
-
-    const lastLog = logs[logs.length - 1];
-    if (!lastLog || lastLog.type !== "received") return;
-
-    console.log(`ตรวจสอบข้อความจาก Arduino: '${lastLog.message}'`);
-    
-    if (
-      lastLog.message === "2" || 
-      lastLog.message.trim() === "2" ||
-      lastLog.message.includes("2")
-    ) {
-      console.log("✅ พบสัญญาณ '2' จาก Arduino!");
-      setWaitingForSignal2(false);
-      setWaitingForArduinoResponse(true); // พร้อมสำหรับขั้นตอนถัดไป
-    }
-  }, [logs, waitingForSignal2]);
-
   const printInitialQRCodes = async (target: number) => {
     const firstBatch = Math.min(target, 15);
     console.log(`Printing first ${firstBatch} QR codes...`);
@@ -909,11 +889,30 @@ const handleStartProduction = useCallback(
         const signal2Received = await new Promise<boolean>((resolve) => {
           console.log("เริ่มตรวจสอบสัญญาณ 2...");
           
+          // เก็บสถานะล่าสุดของ logs เพื่อตรวจสอบเฉพาะข้อความใหม่
+          const currentLogsLength = logs.length;
+          
           // สร้างฟังก์ชันตรวจสอบอย่างต่อเนื่อง
           const checkSignal = () => {
+            // ตรวจสอบเฉพาะข้อความใหม่
+            if (logs.length > currentLogsLength) {
+              for (let i = currentLogsLength; i < logs.length; i++) {
+                const log = logs[i];
+                if (log.type === "received" && 
+                    (log.message === "2" || 
+                    log.message.trim() === "2" || 
+                    log.message.includes("2"))) {
+                  console.log("✅ ตรวจพบสัญญาณ 2 ในข้อความ:", log.message);
+                  setWaitingForSignal2(false);
+                  resolve(true);
+                  return;
+                }
+              }
+            }
+            
             if (!waitingForSignal2) {
               // ได้รับสัญญาณ "2" แล้ว (state ถูกอัพเดตโดย useEffect)
-              console.log("✅ ตรวจพบว่าได้รับสัญญาณ 2 แล้ว");
+              console.log("✅ ตรวจพบว่าได้รับสัญญาณ 2 แล้ว (จาก state)");
               resolve(true);
             } else if (isStopRequested) {
               // มีการขอหยุดระหว่างรอ
