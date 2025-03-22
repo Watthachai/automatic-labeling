@@ -104,24 +104,43 @@ export default function ControlUserPanelPage({
   const [waitingForSignal2, setWaitingForSignal2] = useState(false);
 
   // ฟังก์ชันสำหรับตรวจจับสัญญาณ "2" จาก Arduino - ปรับปรุงจากตัวอย่างโค้ดที่ทำงานได้
-   useEffect(() => {
-    if (waitingForSignal2) {
-      const lastLog = logs[logs.length - 1];
-      if (lastLog?.type === "received") {
-        console.log(`ตรวจสอบข้อความ: '${lastLog.message}'`);
-        
-        const trimmedMessage = lastLog.message.trim();
-        // ตรวจสอบรูปแบบต่างๆ ของข้อความ "2"
-        if (
-            trimmedMessage === "2"
-        ) {
-          console.log("✅ พบสัญญาณ '2' จาก Arduino!");
-          setWaitingForSignal2(false);
-          setWaitingForArduinoResponse(true); // พร้อมสำหรับขั้นตอนถัดไป
-        }
+   // แก้ไขฟังก์ชัน useEffect สำหรับตรวจจับสัญญาณ "2"
+useEffect(() => {
+  if (waitingForSignal2) {
+    // ถ้ามีการเปลี่ยนแปลงของ logs
+    const lastLog = logs[logs.length - 1];
+    
+    // แสดงข้อมูลเพื่อดีบักทุกครั้งที่มีการเปลี่ยนแปลง logs
+    console.log(`[DEBUG SIGNAL2] ตรวจสอบ log ล่าสุด:`, {
+      waitingForSignal2,
+      logExists: !!lastLog,
+      logType: lastLog?.type,
+      message: lastLog?.message,
+      fullLogs: logs
+    });
+    
+    if (lastLog?.type === "received") {
+      // ล้างค่าข้อความทั้งหมด (ตัด whitespace)
+      const trimmedMessage = lastLog.message.trim();
+      
+      console.log(`[DEBUG SIGNAL2] ตรวจสอบข้อความ: '${trimmedMessage}' (length: ${trimmedMessage.length})`);
+      console.log(`[DEBUG SIGNAL2] ตรวจสอบว่าเป็น "2" หรือไม่: ${trimmedMessage === "2"}`);
+      
+      // เพิ่มการเช็คเป็นตัวเลข (ในกรณีที่อาจจะมาเป็นตัวเลข)
+      const isNumber2 = trimmedMessage === "2" || parseInt(trimmedMessage) === 2;
+      console.log(`[DEBUG SIGNAL2] ตรวจสอบว่าเป็นตัวเลข 2 หรือไม่: ${isNumber2}`);
+      
+      // ตรวจสอบเฉพาะเมื่อข้อความเป็น "2" เท่านั้น (หรือในรูปแบบตัวเลข 2)
+      if (isNumber2) {
+        console.log("✅ [DEBUG SIGNAL2] พบสัญญาณ '2' จาก Arduino!");
+        setWaitingForSignal2(false);
+        setWaitingForArduinoResponse(true); // พร้อมสำหรับขั้นตอนถัดไป
+      } else {
+        console.log("❌ [DEBUG SIGNAL2] ข้อความไม่ตรงกับรูปแบบ '2' ที่ต้องการ");
       }
     }
-  }, [logs, waitingForSignal2]);
+  }
+}, [logs, waitingForSignal2]);
 
   const printInitialQRCodes = async (target: number) => {
     const firstBatch = Math.min(target, 15);
