@@ -679,7 +679,7 @@ export default function ControlUserPanelPage({
                   resolve(true);
                 });
               }
-            }, 3000);
+            }, 100);
             
             // เพิ่มการทำความสะอาด timeout ใน cleanup
             return () => {
@@ -717,7 +717,7 @@ export default function ControlUserPanelPage({
                   );
                   resolve(true);
                 }
-              }, 1000);
+              }, 100);
             } else {
               cleanup();
               resolve(false);
@@ -1080,8 +1080,6 @@ if (!isStopRequested && signal2Received) {
   // รอเพิ่มอีกเล็กน้อยเพื่อให้แน่ใจว่า Arduino พร้อม
   await new Promise(resolve => setTimeout(resolve, 500));
   
-          
-          // ส่วนที่เหลือของฟังก์ชัน...
           for (let i = 1; i <= remainingItems; i++) {
             // ตรวจสอบว่าถึงเป้าหมายหรือมีการขอหยุดหรือไม่
             if (printedCountRef.current >= activeTarget || isStopRequested) {
@@ -1096,10 +1094,21 @@ if (!isStopRequested && signal2Received) {
               `กำลังผลิตชิ้นที่ ${itemNumber}/${activeTarget} - ส่งคำสั่ง 110`
             );
 
-            // ส่งคำสั่ง 110 ให้ Arduino ทำงาน
+            const qrData = {
+              ...productionData,
+              serialNumber: `${productionData?.Batch}-${itemNumber}`,
+              timestamp: new Date().toISOString(),
+            };
+            const qrImage = generateQrCodeDataUrl(qrData as SheetData);
+            
+            console.log(`กำลังพิมพ์ QR Code สำหรับชิ้นที่ ${itemNumber}/${activeTarget}`);
+            await handlePrintQR(qrImage, qrData as SheetData, false, activeTarget);
+            
+            // หลังจากพิมพ์เสร็จ ค่อยส่งคำสั่ง 110
+            console.log(`พิมพ์ QR Code เสร็จแล้ว - ส่งคำสั่ง 110 สำหรับชิ้นที่ ${itemNumber}`);
             await sendCommand("110");
-
-            // รอสัญญาณตอบกลับจาก Arduino ก่อนดำเนินการต่อ
+          
+            // ส่วนที่เหลือยังคงเหมือนเดิม
             setWaitingForArduinoResponse(true);
 
             // รอสัญญาณ "1" จาก Arduino โดยเฉพาะ
