@@ -1,74 +1,83 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import LoadingScreen from './LoadingScreen';
+import { toast } from 'react-hot-toast';
 
 interface AuthWrapperProps {
   children: React.ReactNode;
+  requireAdmin?: boolean;
 }
 
-export default function AuthWrapper({ children }: AuthWrapperProps) {
+export default function AuthWrapper({ children, requireAdmin = false }: AuthWrapperProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Removed unused state variable userRole
 
   useEffect(() => {
-    const verifySession = async () => {
-      const token = sessionStorage.getItem('token');
-      
-      // If we're on the login page, don't check auth
-      if (pathname === '/login') {
-        setIsLoading(false);
-        return;
-      }
+    // Skip verification for login page
+    if (pathname === '/login') {
+      setIsLoading(false);
+      return;
+    }
 
+    const verifySession = async () => {
+      setIsLoading(true);
+      
+      const token = sessionStorage.getItem('token');
       if (!token) {
+        console.log('No token found, redirecting to login');
         router.push('/login');
-        setIsLoading(false);
         return;
       }
 
       try {
-        const response = await fetch('/api/verify-session', {
-          headers: {
-            Authorization: `Bearer ${token}`
+        console.log('Verifying with token...');
+        const response = await fetch('/api/auth/verify', {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Cache-Control': 'no-cache'
           }
         });
 
         if (!response.ok) {
-          sessionStorage.removeItem('token');
-          router.push('/login');
-          setIsAuthenticated(false);
-        } else {
-          setIsAuthenticated(true);
+          throw new Error('Session verification failed');
         }
-      } catch (error) {
-        console.error('Auth check failed:', error);
+
+        const userData = await response.json();
+        console.log('User verified:', userData);
+        // No need to set userRole since we're not using it
+        setIsAuthenticated(true);
+
+        // If admin access is required but user is not admin
+        if (requireAdmin && userData.role !== 'ADMIN') {
+          toast.error('คุณไม่มีสิทธิ์เข้าถึงส่วนนี้');
+          router.push('/');
+        }
+      } catch (err) {
+        console.error('Authentication error:', err);
         sessionStorage.removeItem('token');
         router.push('/login');
-        setIsAuthenticated(false);
       } finally {
         setIsLoading(false);
       }
     };
 
     verifySession();
-  }, [router, pathname]);
+  }, [pathname, router, requireAdmin]);
 
+  // Only show loading screen on initial load and for protected routes
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
-  // If on login page or authenticated, render children
-  if (pathname === '/login' || isAuthenticated) {
-    return <>{children}</>;
+  // If not on login page and not authenticated, don't render anything yet
+  if (pathname !== '/login' && !isAuthenticated) {
+    return <LoadingScreen />;
   }
 
-  // Otherwise, return null and let the redirect handle it
-  return null;
+  return <>{children}</>;
 }

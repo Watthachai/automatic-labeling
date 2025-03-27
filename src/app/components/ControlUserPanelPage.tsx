@@ -846,7 +846,7 @@ export default function ControlUserPanelPage({
       }
 
       try {
-        const response = await fetch("/api/verify-session", {
+        const response = await fetch("/api/auth/verify", {
           headers: { Authorization: `Bearer ${token}` },
         });
 

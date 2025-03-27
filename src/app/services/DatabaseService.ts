@@ -1,115 +1,98 @@
-// src/app/services/DatabaseService.ts
+import { prisma } from '../libs/prisma';
+
 export interface User {
-    id: number;
-    username: string;
-    password: string; // In production, use proper password hashing
-    role: 'operator' | 'admin';
-    hospitalId: string;
-  }
-  
-  export interface ProductionLog {
-    id?: number;
-    userId: number;
-    username: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-    material?: string;
-    batch?: string;
-    vendorBatch?: string;
-    materialDescription?: string;
-    startCount: number;
-    endCount: number;
-    totalProduced: number;
-  }
-  
-  class DatabaseService {
-    private dbName = 'hospitalProductionDB';
-    private version = 1;
-  
-    async initDB() {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open(this.dbName, this.version);
-  
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-  
-        request.onupgradeneeded = (event) => {
-          const db = (event.target as IDBOpenDBRequest).result;
-  
-          // Create users store
-          if (!db.objectStoreNames.contains('users')) {
-            const userStore = db.createObjectStore('users', { keyPath: 'id', autoIncrement: true });
-            userStore.createIndex('username', 'username', { unique: true });
-          }
-  
-          // Create production logs store
-          if (!db.objectStoreNames.contains('productionLogs')) {
-            const logStore = db.createObjectStore('productionLogs', { keyPath: 'id', autoIncrement: true });
-            logStore.createIndex('userId', 'userId');
-            logStore.createIndex('date', 'date');
-          }
-        };
+  id: string;
+  username: string;
+  password: string;
+  role: 'OPERATOR' | 'ADMIN';
+  hospitalId: string;
+  phoneNumber: string;
+  department: string;
+  isActive: boolean;
+  is2FAEnabled: boolean;
+}
+
+export interface ProductionLog {
+  id?: string;
+  userId: string;
+  username: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  material?: string;
+  batch?: string;
+  vendorBatch?: string;
+  materialDescription?: string;
+  startCount: number;
+  endCount: number;
+  totalProduced: number;
+  qrCodeData?: string;
+  qrCodeImage?: string;
+  serialNumbers?: string[];
+}
+
+class DatabaseService {
+  async getUser(username: string): Promise<User | null> {
+    // Note: Actual password verification should happen in API route
+    // This is just a stub for reference
+    try {
+      const user = await prisma.user.findUnique({
+        where: { username }
       });
-    }
-  
-    async addUser(user: Omit<User, 'id'>): Promise<number> {
-      const db = await this.initDB() as IDBDatabase;
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['users'], 'readwrite');
-        const store = transaction.objectStore('users');
-        const request = store.add(user);
-  
-        request.onsuccess = () => resolve(request.result as number);
-        request.onerror = () => reject(request.error);
-      });
-    }
-  
-    async getUser(username: string, password: string): Promise<User | null> {
-      const db = await this.initDB() as IDBDatabase;
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['users'], 'readonly');
-        const store = transaction.objectStore('users');
-        const index = store.index('username');
-        const request = index.get(username);
-  
-        request.onsuccess = () => {
-          const user = request.result;
-          if (user && user.password === password) {
-            resolve(user);
-          } else {
-            resolve(null);
-          }
-        };
-        request.onerror = () => reject(request.error);
-      });
-    }
-  
-    async addProductionLog(log: Omit<ProductionLog, 'id'>): Promise<number> {
-      const db = await this.initDB() as IDBDatabase;
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['productionLogs'], 'readwrite');
-        const store = transaction.objectStore('productionLogs');
-        const request = store.add(log);
-  
-        request.onsuccess = () => resolve(request.result as number);
-        request.onerror = () => reject(request.error);
-      });
-    }
-  
-    async getProductionLogs(userId?: number): Promise<ProductionLog[]> {
-      const db = await this.initDB() as IDBDatabase;
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['productionLogs'], 'readonly');
-        const store = transaction.objectStore('productionLogs');
-        const request = userId 
-          ? store.index('userId').getAll(userId)
-          : store.getAll();
-  
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
+      
+      return user as unknown as User;
+    } catch (error) {
+      console.error('Error getting user:', error);
+      return null;
     }
   }
-  
-  export const dbService = new DatabaseService();
+
+  async addProductionLog(log: Omit<ProductionLog, 'id'>): Promise<string> {
+    try {
+      const newLog = await prisma.productionLog.create({
+        data: {
+          userId: log.userId,
+          username: log.username,
+          date: log.date,
+          startTime: log.startTime,
+          endTime: log.endTime,
+          material: log.material || '',
+          batch: log.batch || '',
+          vendorBatch: log.vendorBatch || '',
+          materialDescription: log.materialDescription || '',
+          startCount: log.startCount,
+          endCount: log.endCount,
+          totalProduced: log.totalProduced,
+          qrCodeData: log.qrCodeData || '',
+          qrCodeImage: log.qrCodeImage || '',
+          serialNumbers: log.serialNumbers || [],
+        }
+      });
+      
+      return newLog.id;
+    } catch (error) {
+      console.error('Error adding production log:', error);
+      throw error;
+    }
+  }
+
+  async getProductionLogs(userId?: string): Promise<ProductionLog[]> {
+    try {
+      if (userId) {
+        return await prisma.productionLog.findMany({
+          where: { userId },
+          orderBy: { startTime: 'desc' },
+        }) as unknown as ProductionLog[];
+      } else {
+        return await prisma.productionLog.findMany({
+          orderBy: { startTime: 'desc' },
+        }) as unknown as ProductionLog[];
+      }
+    } catch (error) {
+      console.error('Error getting production logs:', error);
+      return [];
+    }
+  }
+}
+
+export const dbService = new DatabaseService();

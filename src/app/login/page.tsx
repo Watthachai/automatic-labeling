@@ -1,51 +1,61 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import LoadingScreen from '../components/LoadingScreen';
-
-interface LoginResponse {
-  token: string;
-  error?: string;
-}
 
 export default function LoginPage() {
   const router = useRouter();
-  const [credentials, setCredentials] = useState({
+  const [formData, setFormData] = useState({
+    hospitalId: '',
     username: '',
-    password: '',
-    hospitalId: ''
+    password: ''
   });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    setError(''); // Clear error when user types
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     setError('');
-    setIsLoading(true);
 
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials)
+        body: JSON.stringify(formData)
       });
 
-      const data = await response.json() as LoginResponse;
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'เข้าสู่ระบบล้มเหลว');
+        throw new Error(data.error || 'Login failed');
       }
 
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('token', data.token);
-      }
-      router.push('/');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'เข้าสู่ระบบล้มเหลว');
+      // Store token in sessionStorage (not localStorage)
+      sessionStorage.setItem('token', data.token);
+      
+      // Debug message to verify token storage
+      console.log('Token stored successfully');
+      
+      // Apply a slight delay to ensure token is stored before redirect
+      setTimeout(() => {
+        // Redirect based on role
+        const redirectPath = data.user.role === 'ADMIN' ? '/admin' : '/';
+        router.push(redirectPath);
+      }, 100);
+      
+    } catch (err: unknown) {
+      console.error('Login error:', err);
+      setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -122,12 +132,13 @@ export default function LoginPage() {
               </label>
               <input
                 id="hospitalId"
+                name="hospitalId"
                 type="text"
                 required
                 className="mt-1 block w-full px-3 py-2 md:px-4 md:py-3 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 transition duration-150 text-sm md:text-base"
                 placeholder="กรอกรหัสโรงพยาบาล"
-                value={credentials.hospitalId}
-                onChange={(e) => setCredentials({...credentials, hospitalId: e.target.value})}
+                value={formData.hospitalId}
+                onChange={handleChange}
               />
             </div>
             <div>
@@ -136,12 +147,13 @@ export default function LoginPage() {
               </label>
               <input
                 id="username"
+                name="username"
                 type="text"
                 required
                 className="mt-1 block w-full px-3 py-2 md:px-4 md:py-3 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 transition duration-150 text-sm md:text-base"
                 placeholder="กรอกชื่อผู้ใช้"
-                value={credentials.username}
-                onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                value={formData.username}
+                onChange={handleChange}
               />
             </div>
             <div>
@@ -150,27 +162,28 @@ export default function LoginPage() {
               </label>
               <input
                 id="password"
+                name="password"
                 type="password"
                 required
                 className="mt-1 block w-full px-3 py-2 md:px-4 md:py-3 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 transition duration-150 text-sm md:text-base"
                 placeholder="กรอกรหัสผ่าน"
-                value={credentials.password}
-                onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                value={formData.password}
+                onChange={handleChange}
               />
             </div>
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={loading}
               className={`
                 w-full flex justify-center py-2 md:py-3 px-4 rounded-lg text-white text-sm md:text-base font-semibold
-                ${isLoading 
+                ${loading 
                   ? 'bg-blue-400 cursor-not-allowed' 
                   : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'}
                 transition duration-150
               `}
             >
-              {isLoading ? (
+              {loading ? (
                 <div className="flex items-center">
                   <div className="w-4 h-4 md:w-5 md:h-5 border-t-2 border-b-2 border-white rounded-full animate-spin mr-2 md:mr-3"></div>
                   กำลังเข้าสู่ระบบ...
