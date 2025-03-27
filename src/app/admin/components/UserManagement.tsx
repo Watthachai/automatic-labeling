@@ -24,7 +24,7 @@ export default function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [hospitals, setHospitals] = useState<{id: string, name: string}[]>([]);
   
-  // Form states
+  // Form states - ensure all string values are initialized as empty strings, not null
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -32,7 +32,7 @@ export default function UserManagement() {
     phoneNumber: '',
     department: '',
     hospitalId: '',
-    role: 'OPERATOR',
+    role: 'OPERATOR' as const, // Use const assertion to help TypeScript
     isActive: true,
     is2FAEnabled: true
   });
@@ -42,6 +42,11 @@ export default function UserManagement() {
     const fetchUsers = async () => {
       try {
         const token = sessionStorage.getItem('token');
+        if (!token) {
+          toast.error('ไม่พบข้อมูลการเข้าสู่ระบบ');
+          return;
+        }
+        
         const response = await fetch('/api/admin/users', {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -62,6 +67,8 @@ export default function UserManagement() {
     const fetchHospitals = async () => {
       try {
         const token = sessionStorage.getItem('token');
+        if (!token) return;
+        
         const response = await fetch('/api/admin/hospitals', {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -71,6 +78,14 @@ export default function UserManagement() {
         if (!response.ok) throw new Error('Failed to fetch hospitals');
         const data = await response.json();
         setHospitals(data);
+        
+        // Initialize hospitalId with first hospital if available
+        if (data.length > 0 && !formData.hospitalId) {
+          setFormData(prev => ({
+            ...prev,
+            hospitalId: data[0].id
+          }));
+        }
       } catch (error) {
         console.error('Error fetching hospitals:', error);
       }
@@ -87,12 +102,14 @@ export default function UserManagement() {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData(prev => ({ ...prev, [name]: checked }));
     } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      // Ensure value is never null - use empty string if needed
+      setFormData(prev => ({ ...prev, [name]: value ?? '' }));
     }
   };
 
   const openAddModal = () => {
     setSelectedUser(null);
+    // Ensure all string values are empty strings, not null
     setFormData({
       username: '',
       password: '',
@@ -109,16 +126,17 @@ export default function UserManagement() {
 
   const openEditModal = (user: User) => {
     setSelectedUser(user);
+    // Ensure all properties have valid values, not null
     setFormData({
-      username: user.username,
+      username: user.username || '',
       password: '',
       confirmPassword: '',
-      phoneNumber: user.phoneNumber,
-      department: user.department,
-      hospitalId: user.hospitalId,
-      role: user.role,
-      isActive: user.isActive,
-      is2FAEnabled: user.is2FAEnabled
+      phoneNumber: user.phoneNumber || '',
+      department: user.department || '',
+      hospitalId: user.hospitalId || '',
+      role: user.role || 'OPERATOR',
+      isActive: user.isActive !== undefined ? user.isActive : true,
+      is2FAEnabled: user.is2FAEnabled !== undefined ? user.is2FAEnabled : true
     });
     setIsModalOpen(true);
   };
@@ -167,6 +185,10 @@ export default function UserManagement() {
     try {
       setLoading(true);
       const token = sessionStorage.getItem('token');
+      if (!token) {
+        toast.error('ไม่พบข้อมูลการเข้าสู่ระบบ');
+        return;
+      }
       
       const url = selectedUser 
         ? `/api/admin/users/${selectedUser.id}` 
@@ -175,14 +197,7 @@ export default function UserManagement() {
       const method = selectedUser ? 'PUT' : 'POST';
       
       // สร้างข้อมูลสำหรับส่ง API
-      type ApiDataType = Omit<typeof formData, 'confirmPassword'> & {
-        confirmPassword?: string;
-        password?: string;
-      };
-      
-      const apiData: ApiDataType = {
-        ...formData
-      };
+      const apiData = { ...formData };
       
       // ลบ confirmPassword ออก
       delete apiData.confirmPassword;
@@ -212,6 +227,11 @@ export default function UserManagement() {
           'Authorization': `Bearer ${token}`
         }
       });
+      
+      if (!usersResponse.ok) {
+        throw new Error('Failed to refresh user list');
+      }
+      
       const updatedUsers = await usersResponse.json();
       setUsers(updatedUsers);
       
